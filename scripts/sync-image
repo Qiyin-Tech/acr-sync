@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if ! command -v skopeo >/dev/null 2>&1; then
+  sudo apt-get update
+  sudo apt-get install --yes skopeo
+fi
+skopeo --version
+
+SOURCE="${SOURCE:?error: SOURCE is required}"
+TAG="${TAG:?error: TAG is required}"
+ARCH="${ARCH:?error: ARCH is required}"
+TARGET_NAMESPACE="${TARGET_NAMESPACE:?error: TARGET_NAMESPACE is required}"
+ACR_ENDPOINT="${ACR_ENDPOINT:?error: vars.ACR_ENDPOINT is required}"
+ACR_USERNAME="${ACR_USERNAME:?error: ACR_USERNAME is required}"
+ACR_PASSWORD="${ACR_PASSWORD:?error: ACR_PASSWORD is required}"
+
+if [[ -n "${SOURCE_USERNAME:-}" || -n "${SOURCE_PASSWORD:-}" ]]; then
+  [[ -n "${SOURCE_USERNAME:-}" && -n "${SOURCE_PASSWORD:-}" ]] || {
+    echo "error: SOURCE_USERNAME and SOURCE_PASSWORD must be provided together" >&2
+    exit 1
+  }
+fi
+
+auth_dir="$(mktemp -d "${RUNNER_TEMP}/acr-sync-auth.XXXXXX")"
+auth_file="${auth_dir}/auth.json"
+digest_file="${auth_dir}/digest"
+cleanup() {
+  rm -f "${auth_file}" "${digest_file}"
+  rmdir "${auth_dir}" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+source_username="${SOURCE_USERNAME:-}"
+source_password="${SOURCE_PASSWORD:-}"
+if [[ -z "${source_username}" &&
+      ( "${SOURCE}" == ghcr.io/* || "${SOURCE}" == docker://ghcr.io/* ) ]]; then
+  source_username="${GHCR_USERNAME:-}"
+  source_password="${GHCR_TOKEN:-}"
+fi
+
+if [[ -n "${source_username}" ]]; then
+  [[ -n "${source_password}" ]] || {
+    echo "error: source registry password or token is required" >&2
+    exit 1
+  }
+  source_without_transport="${SOURCE#docker://}"
+  source_registry="${source_without_transport%%/*}"
+  printf '%s' "${source_password}" |
+    skopeo login \
+      --authfile "${auth_file}" \
+      --username "${source_username}" \
+      --password-stdin \
+      "${source_registry}"
+fi
+
+acr_endpoint="${ACR_ENDPOINT#https://}"
+acr_endpoint="${acr_endpoint#http://}"
+acr_endpoint="${acr_endpoint%/}"
+source_image="${SOURCE#docker://}"
+source_image="${source_image%/}"
+target_namespace="${TARGET_NAMESPACE#/}"
+target_namespace="${target_namespace%/}"
+image_name="${source_image##*/}"
+
+[[ "${source_image}" == */* ]] || {
+  echo "error: source must include a registry or namespace" >&2
+  exit 1
+}
+[[ "${image_name}" != *:* && "${image_name}" != *@* ]] || {
+  echo "error: source must not include a tag or digest" >&2
+  exit 1
+}
+[[ "${image_name}" =~ ^[a-z0-9]+([._-][a-z0-9]+)*$ ]] || {
+  echo "error: source image name is not a valid lowercase repository name" >&2
+  exit 1
+}
+[[ "${TAG}" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]] || {
+  echo "error: tag is not a valid container image tag" >&2
+  exit 1
+}
+[[ "${ARCH}" =~ ^[a-z0-9][a-z0-9_-]*$ ]] || {
+  echo "error: arch is not a valid architecture name" >&2
+  exit 1
+}
+[[ "${target_namespace}" =~ ^[a-z0-9]+([._-][a-z0-9]+)*(/[a-z0-9]+([._-][a-z0-9]+)*)*$ ]] || {
+  echo "error: target_namespace is not a valid lowercase repository path" >&2
+  exit 1
+}
+[[ -n "${acr_endpoint}" && "${acr_endpoint}" != */* ]] || {
+  echo "error: vars.ACR_ENDPOINT must be a registry hostname without a path" >&2
+  exit 1
+}
+
+printf '%s' "${ACR_PASSWORD}" |
+  skopeo login \
+    --authfile "${auth_file}" \
+    --username "${ACR_USERNAME}" \
+    --password-stdin \
+    "${acr_endpoint}"
+
+source_ref="docker://${source_image}:${TAG}"
+target_ref="docker://${acr_endpoint}/${target_namespace}/${image_name}:${TAG}"
+
+printf 'Syncing %s -> %s for architecture %s\n' \
+  "${source_ref}" "${target_ref}" "${ARCH}"
+skopeo copy \
+  --authfile "${auth_file}" \
+  --override-arch "${ARCH}" \
+  --preserve-digests \
+  --digestfile "${digest_file}" \
+  "${source_ref}" \
+  "${target_ref}"
+
+digest="$(<"${digest_file}")"
+[[ -n "${digest}" ]] || {
+  echo "error: Skopeo returned an empty digest" >&2
+  exit 1
+}
+printf 'Copied manifest digest: %s\n' "${digest}"
+printf 'digest=%s\n' "${digest}" >> "${GITHUB_OUTPUT}"

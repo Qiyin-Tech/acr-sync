@@ -1,5 +1,5 @@
 name: Sync image to ACR
-description: Copy one tagged container image to ACR with Skopeo
+description: Copy one tagged container image to the organization ACR with Skopeo
 
 inputs:
   source:
@@ -13,10 +13,7 @@ inputs:
     required: false
     default: amd64
   target_namespace:
-    description: Target ACR namespace, e.g. qiyin
-    required: true
-  target_registry:
-    description: Target ACR hostname without scheme or path, e.g. acr-chegndu-registry.cn-chengdu.cr.aliyuncs.com
+    description: Target ACR namespace, e.g. qiyin or public
     required: true
   source_username:
     description: Optional source registry username; leave empty for public images
@@ -39,17 +36,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Install Skopeo
-      shell: bash
-      run: |
-        set -euo pipefail
-        if ! command -v skopeo >/dev/null 2>&1; then
-          sudo apt-get update
-          sudo apt-get install --yes skopeo
-        fi
-        skopeo --version
-
-    - name: Authenticate and sync image
+    - name: Sync image
       id: sync
       shell: bash
       env:
@@ -57,141 +44,11 @@ runs:
         TAG: ${{ inputs.tag }}
         ARCH: ${{ inputs.arch }}
         TARGET_NAMESPACE: ${{ inputs.target_namespace }}
-        TARGET_REGISTRY: ${{ inputs.target_registry }}
+        ACR_ENDPOINT: ${{ vars.ACR_ENDPOINT }}
         SOURCE_USERNAME: ${{ inputs.source_username }}
         SOURCE_PASSWORD: ${{ inputs.source_password }}
         ACR_USERNAME: ${{ inputs.acr_username }}
         ACR_PASSWORD: ${{ inputs.acr_password }}
         GHCR_USERNAME: ${{ github.actor }}
         GHCR_TOKEN: ${{ github.token }}
-      run: |
-        set -euo pipefail
-
-        [[ -n "${SOURCE}" ]] || {
-          echo "error: source is required" >&2
-          exit 1
-        }
-        [[ -n "${TAG}" ]] || {
-          echo "error: tag is required" >&2
-          exit 1
-        }
-        [[ -n "${ARCH}" ]] || {
-          echo "error: arch is required" >&2
-          exit 1
-        }
-        [[ -n "${TARGET_NAMESPACE}" ]] || {
-          echo "error: target_namespace is required" >&2
-          exit 1
-        }
-        [[ -n "${TARGET_REGISTRY}" ]] || {
-          echo "error: target_registry is required" >&2
-          exit 1
-        }
-        [[ -n "${ACR_USERNAME}" ]] || {
-          echo "error: acr_username is required" >&2
-          exit 1
-        }
-        [[ -n "${ACR_PASSWORD}" ]] || {
-          echo "error: acr_password is required" >&2
-          exit 1
-        }
-        if [[ -n "${SOURCE_USERNAME}" || -n "${SOURCE_PASSWORD}" ]]; then
-          [[ -n "${SOURCE_USERNAME}" && -n "${SOURCE_PASSWORD}" ]] || {
-            echo "error: source_username and source_password must be provided together" >&2
-            exit 1
-          }
-        fi
-
-        auth_dir="$(mktemp -d "${RUNNER_TEMP}/acr-sync-auth.XXXXXX")"
-        auth_file="${auth_dir}/auth.json"
-        digest_file="${auth_dir}/digest"
-        cleanup() {
-          rm -f "${auth_file}" "${digest_file}"
-          rmdir "${auth_dir}" 2>/dev/null || true
-        }
-        trap cleanup EXIT
-
-        source_username="${SOURCE_USERNAME}"
-        source_password="${SOURCE_PASSWORD}"
-        if [[ -z "${source_username}" &&
-              ( "${SOURCE}" == ghcr.io/* || "${SOURCE}" == docker://ghcr.io/* ) ]]; then
-          source_username="${GHCR_USERNAME}"
-          source_password="${GHCR_TOKEN}"
-        fi
-
-        if [[ -n "${source_username}" ]]; then
-          source_without_transport="${SOURCE#docker://}"
-          source_registry="${source_without_transport%%/*}"
-          printf '%s' "${source_password}" |
-            skopeo login \
-              --authfile "${auth_file}" \
-              --username "${source_username}" \
-              --password-stdin \
-              "${source_registry}"
-        fi
-
-        target_registry="${TARGET_REGISTRY#https://}"
-        target_registry="${target_registry#http://}"
-        target_registry="${target_registry%/}"
-        source_image="${SOURCE#docker://}"
-        source_image="${source_image%/}"
-        target_namespace="${TARGET_NAMESPACE#/}"
-        target_namespace="${target_namespace%/}"
-        image_name="${source_image##*/}"
-
-        [[ "${source_image}" == */* ]] || {
-          echo "error: source must include a registry or namespace" >&2
-          exit 1
-        }
-        [[ "${image_name}" != *:* && "${image_name}" != *@* ]] || {
-          echo "error: source must not include a tag or digest" >&2
-          exit 1
-        }
-        [[ "${image_name}" =~ ^[a-z0-9]+([._-][a-z0-9]+)*$ ]] || {
-          echo "error: source image name is not a valid lowercase repository name" >&2
-          exit 1
-        }
-        [[ "${TAG}" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]] || {
-          echo "error: tag is not a valid container image tag" >&2
-          exit 1
-        }
-        [[ "${ARCH}" =~ ^[a-z0-9][a-z0-9_-]*$ ]] || {
-          echo "error: arch is not a valid architecture name" >&2
-          exit 1
-        }
-        [[ "${target_namespace}" =~ ^[a-z0-9]+([._-][a-z0-9]+)*(/[a-z0-9]+([._-][a-z0-9]+)*)*$ ]] || {
-          echo "error: target_namespace is not a valid lowercase repository path" >&2
-          exit 1
-        }
-        [[ -n "${target_registry}" && "${target_registry}" != */* ]] || {
-          echo "error: target_registry must be a registry hostname without a path" >&2
-          exit 1
-        }
-
-        printf '%s' "${ACR_PASSWORD}" |
-          skopeo login \
-            --authfile "${auth_file}" \
-            --username "${ACR_USERNAME}" \
-            --password-stdin \
-            "${target_registry}"
-
-        source_ref="docker://${source_image}:${TAG}"
-        target_ref="docker://${target_registry}/${target_namespace}/${image_name}:${TAG}"
-
-        printf 'Syncing %s -> %s for architecture %s\n' \
-          "${source_ref}" "${target_ref}" "${ARCH}"
-        skopeo copy \
-          --authfile "${auth_file}" \
-          --override-arch "${ARCH}" \
-          --preserve-digests \
-          --digestfile "${digest_file}" \
-          "${source_ref}" \
-          "${target_ref}"
-
-        digest="$(<"${digest_file}")"
-        [[ -n "${digest}" ]] || {
-          echo "error: Skopeo returned an empty digest" >&2
-          exit 1
-        }
-        printf 'Copied manifest digest: %s\n' "${digest}"
-        printf 'digest=%s\n' "${digest}" >> "${GITHUB_OUTPUT}"
+      run: ${{ github.action_path }}/scripts/sync-image

@@ -1,0 +1,11 @@
+dockerhub:
+  archs:
+    - amd64
+  target_namespace: public
+  manifest_path: manifest/dockerhub.yml
+
+ghcr:
+  archs:
+    - amd64
+  target_namespace: qiyin
+  manifest_path: manifest/ghcr.yml

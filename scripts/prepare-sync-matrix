@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+config_path="${SYNC_CONFIG:-sync.yml}"
+
+for command_name in git jq yq; do
+  command -v "${command_name}" >/dev/null 2>&1 || {
+    echo "error: required command is unavailable: ${command_name}" >&2
+    exit 1
+  }
+done
+
+[[ -f "${config_path}" ]] || {
+  echo "error: sync configuration does not exist: ${config_path}" >&2
+  exit 1
+}
+
+config_json="$(yq -o=json -I=0 '.' "${config_path}")"
+
+jq -e '
+  type == "object" and length > 0 and
+  all(
+    to_entries[];
+    (.key | test("^[A-Za-z0-9][A-Za-z0-9._-]*$")) and
+    (.value | type == "object") and
+    (.value.archs | type == "array" and length > 0) and
+    all(.value.archs[]; type == "string" and test("^[a-z0-9][a-z0-9_-]*$")) and
+    (.value.archs | length == (unique | length)) and
+    (.value.target_namespace |
+      type == "string" and
+      test("^[a-z0-9]+([._-][a-z0-9]+)*(/[a-z0-9]+([._-][a-z0-9]+)*)*$")
+    ) and
+    (.value.manifest_path |
+      type == "string" and
+      test("^manifest/[A-Za-z0-9._/-]+\\.ya?ml$") and
+      (contains("../") | not)
+    )
+  )
+' <<<"${config_json}" >/dev/null || {
+  echo "error: ${config_path} does not match the required alias schema" >&2
+  exit 1
+}
+
+duplicate_manifest="$(
+  jq -r '
+    [to_entries[] | .value.manifest_path]
+    | group_by(.)
+    | map(select(length > 1) | .[0])
+    | first // empty
+  ' <<<"${config_json}"
+)"
+[[ -z "${duplicate_manifest}" ]] || {
+  echo "error: manifest_path is assigned to more than one alias: ${duplicate_manifest}" >&2
+  exit 1
+}
+
+multi_arch_alias="$(
+  jq -r '
+    to_entries[]
+    | select(.value.archs | length > 1)
+    | .key
+  ' <<<"${config_json}" | head -n 1
+)"
+[[ -z "${multi_arch_alias}" ]] || {
+  echo "error: alias ${multi_arch_alias} selects multiple architectures for the same target tags" >&2
+  echo "error: use one architecture until multi-architecture index assembly is supported" >&2
+  exit 1
+}
+
+if [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
+  jq -e --arg name "${INPUT_NAME}" 'has($name)' <<<"${config_json}" >/dev/null || {
+    echo "error: unknown sync alias: ${INPUT_NAME}" >&2
+    exit 1
+  }
+  selected_names="$(jq -cn --arg name "${INPUT_NAME}" '[$name]')"
+else
+  if [[ "${BEFORE_SHA}" =~ ^0+$ ]]; then
+    mapfile -t changed_files < <(
+      git diff-tree --no-commit-id --name-only -r "${CURRENT_SHA}"
+    )
+  else
+    mapfile -t changed_files < <(
+      git diff --name-only --diff-filter=ACDMRT "${BEFORE_SHA}" "${CURRENT_SHA}"
+    )
+  fi
+
+  printf 'Changed files:\n'
+  printf '  %s\n' "${changed_files[@]}"
+
+  if printf '%s\n' "${changed_files[@]}" | grep -Fxq "${config_path}"; then
+    selected_names="$(jq -c 'keys' <<<"${config_json}")"
+  else
+    changed_json="$(
+      printf '%s\n' "${changed_files[@]}" |
+        jq -Rsc 'split("\n") | map(select(length > 0))'
+    )"
+    selected_names="$(
+      jq -c --argjson changed "${changed_json}" '
+        [
+          to_entries[]
+          | select(.value.manifest_path as $path | $changed | index($path))
+          | .key
+        ]
+      ' <<<"${config_json}"
+    )"
+  fi
+fi
+
+[[ "$(jq 'length' <<<"${selected_names}")" -gt 0 ]] || {
+  echo "error: no sync alias maps to the changed manifest files" >&2
+  exit 1
+}
+
+runnable_names='[]'
+while IFS= read -r name; do
+  manifest_path="$(
+    jq -r --arg name "${name}" '.[$name].manifest_path' <<<"${config_json}"
+  )"
+  [[ -f "${manifest_path}" ]] || {
+    echo "error: selected manifest does not exist: ${manifest_path}" >&2
+    exit 1
+  }
+  if ! yq -e 'tag == "!!map" and length > 0' "${manifest_path}" >/dev/null 2>&1; then
+    if [[ "${EVENT_NAME}" == "workflow_dispatch" ]]; then
+      echo "error: selected manifest must be a non-empty YAML mapping: ${manifest_path}" >&2
+      exit 1
+    fi
+    echo "warning: skipping empty manifest selected by push: ${manifest_path}" >&2
+    continue
+  fi
+  runnable_names="$(
+    jq -c --arg name "${name}" '. + [$name]' <<<"${runnable_names}"
+  )"
+done < <(jq -r '.[]' <<<"${selected_names}")
+selected_names="${runnable_names}"
+
+if [[ "$(jq 'length' <<<"${selected_names}")" -eq 0 ]]; then
+  matrix='{"include":[]}'
+  echo "No non-empty manifests were selected."
+  printf 'matrix=%s\n' "${matrix}" >> "${GITHUB_OUTPUT}"
+  printf 'should_run=false\n' >> "${GITHUB_OUTPUT}"
+  exit 0
+fi
+
+matrix="$(
+  jq -c --argjson names "${selected_names}" '
+    . as $config
+    | {
+        include: [
+          $names[] as $name
+          | $config[$name] as $entry
+          | $entry.archs[]
+          | {
+              name: $name,
+              arch: .,
+              target_namespace: $entry.target_namespace,
+              manifest_path: $entry.manifest_path
+            }
+        ]
+      }
+  ' <<<"${config_json}"
+)"
+
+printf 'Selected matrix: %s\n' "${matrix}"
+printf 'matrix=%s\n' "${matrix}" >> "${GITHUB_OUTPUT}"
+printf 'should_run=true\n' >> "${GITHUB_OUTPUT}"

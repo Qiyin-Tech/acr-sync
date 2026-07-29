@@ -21,11 +21,6 @@ on:
         description: Target ACR namespace, e.g. qiyin
         required: true
         type: string
-      target_registry:
-        description: Target ACR hostname, e.g. acr-chegndu-registry.cn-chengdu.cr.aliyuncs.com
-        required: false
-        default: acr-chegndu-registry.cn-chengdu.cr.aliyuncs.com
-        type: string
 
 permissions:
   contents: read
@@ -47,6 +42,5 @@ jobs:
           tag: ${{ inputs.tag }}
           arch: ${{ inputs.arch }}
           target_namespace: ${{ inputs.target_namespace }}
-          target_registry: ${{ inputs.target_registry }}
           acr_username: ${{ vars.ACR_USERNAME }}
           acr_password: ${{ secrets.ACR_PASSWORD }}

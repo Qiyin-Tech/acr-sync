@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+for command_name in skopeo yq; do
+  command -v "${command_name}" >/dev/null 2>&1 || {
+    echo "error: required command is unavailable: ${command_name}" >&2
+    exit 1
+  }
+done
+
+ARCH="${ARCH:?error: ARCH is required}"
+TARGET_NAMESPACE="${TARGET_NAMESPACE:?error: TARGET_NAMESPACE is required}"
+ACR_ENDPOINT="${ACR_ENDPOINT:?error: ACR_ENDPOINT is required}"
+MANIFEST_PATH="${MANIFEST_PATH:?error: MANIFEST_PATH is required}"
+ACR_USERNAME="${ACR_USERNAME:?error: ACR_USERNAME is required}"
+ACR_PASSWORD="${ACR_PASSWORD:?error: ACR_PASSWORD is required}"
+
+[[ -f "${MANIFEST_PATH}" ]] || {
+  echo "error: manifest does not exist: ${MANIFEST_PATH}" >&2
+  exit 1
+}
+yq -e 'tag == "!!map" and length > 0' "${MANIFEST_PATH}" >/dev/null || {
+  echo "error: manifest must be a non-empty YAML mapping: ${MANIFEST_PATH}" >&2
+  exit 1
+}
+
+acr_endpoint="${ACR_ENDPOINT#https://}"
+acr_endpoint="${acr_endpoint#http://}"
+acr_endpoint="${acr_endpoint%/}"
+
+[[ -n "${acr_endpoint}" && "${acr_endpoint}" != */* ]] || {
+  echo "error: vars.ACR_ENDPOINT must be a registry hostname without a path" >&2
+  exit 1
+}
+
+auth_dir="$(mktemp -d "${RUNNER_TEMP}/acr-sync-auth.XXXXXX")"
+auth_file="${auth_dir}/auth.json"
+cleanup() {
+  rm -f "${auth_file}"
+  rmdir "${auth_dir}" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+if yq -e 'has("ghcr.io")' "${MANIFEST_PATH}" >/dev/null; then
+  [[ -n "${GHCR_USERNAME:-}" && -n "${GHCR_TOKEN:-}" ]] || {
+    echo "error: GHCR manifest requires github.actor and github.token" >&2
+    exit 1
+  }
+  printf '%s' "${GHCR_TOKEN}" |
+    skopeo login \
+      --authfile "${auth_file}" \
+      --username "${GHCR_USERNAME}" \
+      --password-stdin \
+      ghcr.io
+fi
+
+printf '%s' "${ACR_PASSWORD}" |
+  skopeo login \
+    --authfile "${auth_file}" \
+    --username "${ACR_USERNAME}" \
+    --password-stdin \
+    "${acr_endpoint}"
+
+skopeo sync \
+  --src yaml \
+  --dest docker \
+  --authfile "${auth_file}" \
+  --override-arch "${ARCH}" \
+  --preserve-digests \
+  --keep-going \
+  --retry-times 3 \
+  "${MANIFEST_PATH}" \
+  "${acr_endpoint}/${TARGET_NAMESPACE}"
