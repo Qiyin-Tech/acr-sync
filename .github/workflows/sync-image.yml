@@ -24,7 +24,6 @@ on:
 
 permissions:
   contents: read
-  packages: read
 
 jobs:
   sync:
@@ -42,6 +41,8 @@ jobs:
           tag: ${{ inputs.tag }}
           arch: ${{ inputs.arch }}
           target_namespace: ${{ inputs.target_namespace }}
+          source_username: ${{ (startsWith(inputs.source, 'ghcr.io/') || startsWith(inputs.source, 'docker://ghcr.io/')) && vars.GHCR_USERNAME || '' }}
+          source_password: ${{ (startsWith(inputs.source, 'ghcr.io/') || startsWith(inputs.source, 'docker://ghcr.io/')) && secrets.GHCR_TOKEN || '' }}
           acr_endpoint: ${{ vars.ACR_ENDPOINT }}
           acr_username: ${{ vars.ACR_USERNAME }}
           acr_password: ${{ secrets.ACR_PASSWORD }}

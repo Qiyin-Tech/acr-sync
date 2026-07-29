@@ -43,7 +43,7 @@ trap cleanup EXIT
 
 if yq -e 'has("ghcr.io")' "${MANIFEST_PATH}" >/dev/null; then
   [[ -n "${GHCR_USERNAME:-}" && -n "${GHCR_TOKEN:-}" ]] || {
-    echo "error: GHCR manifest requires github.actor and github.token" >&2
+    echo "error: GHCR manifest requires GHCR_USERNAME and GHCR_TOKEN" >&2
     exit 1
   }
   printf '%s' "${GHCR_TOKEN}" |

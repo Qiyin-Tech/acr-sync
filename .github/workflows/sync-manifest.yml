@@ -18,7 +18,6 @@ on:
 
 permissions:
   contents: read
-  packages: read
 
 concurrency:
   group: sync-manifest
@@ -68,6 +67,6 @@ jobs:
           ACR_ENDPOINT: ${{ vars.ACR_ENDPOINT }}
           ACR_USERNAME: ${{ vars.ACR_USERNAME }}
           ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
-          GHCR_USERNAME: ${{ github.actor }}
-          GHCR_TOKEN: ${{ github.token }}
+          GHCR_USERNAME: ${{ vars.GHCR_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
         run: scripts/sync-manifest

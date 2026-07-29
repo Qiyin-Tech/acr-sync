@@ -100,7 +100,9 @@ ghcr.io/qiyin-tech/orchestra-backend:v1.2.3
 
 - `acr_endpoint` input 来自 `vars.ACR_ENDPOINT`。
 - ACR 用户名和密码来自 `vars.ACR_USERNAME` 与 `secrets.ACR_PASSWORD`。
-- 公开源匿名读取；GHCR 使用当前 workflow 的 `GITHUB_TOKEN`。
+- 公开源匿名读取。
+- GHCR 使用 repository-level `vars.GHCR_USERNAME` 与 `secrets.GHCR_TOKEN`；两者只在 `source` 为 `ghcr.io/...` 时传给 composite action。
+- 下游仓库直接调用 composite action 且不传源凭据时，仍回退到调用 workflow 的 `github.actor` 和 `GITHUB_TOKEN`。
 
 ## Manifest 批量同步
 
@@ -183,9 +185,13 @@ workflow YAML 只负责 GitHub Actions 编排：
 ACR_ENDPOINT: ${{ vars.ACR_ENDPOINT }}
 ACR_USERNAME: ${{ vars.ACR_USERNAME }}
 ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+GHCR_USERNAME: ${{ vars.GHCR_USERNAME }}
+GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
 ```
 
-manifest 顶层包含 `ghcr.io` 时，脚本使用 `github.actor` 和当前 workflow 的 `GITHUB_TOKEN` 登录 GHCR。workflow 已声明 `packages: read`；私有 package 仍需允许 `Qiyin-Tech/acr-sync` 仓库访问。
+`GHCR_USERNAME` 和 `GHCR_TOKEN` 是 `Qiyin-Tech/acr-sync` 的 repository-level Actions variable/secret。`GHCR_TOKEN` 必须是由 `GHCR_USERNAME` 对应账号创建、具有 `read:packages` scope 的 classic PAT。manifest 顶层包含 `ghcr.io` 时，脚本使用这组凭据登录 GHCR。
+
+单镜像 action 的认证行为不变：下游仓库未填写 `source_username` 和 `source_password` 时，仍使用调用 workflow 的 `github.actor` 和 `GITHUB_TOKEN`。
 
 `ubuntu-latest` runner 必须提供 `git`、`jq`、mikefarah `yq` 和 Skopeo；缺少任一命令时批量任务会直接失败并报告缺失的命令。
 
