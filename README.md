@@ -47,11 +47,11 @@ jobs:
           tag: v1.2.3
           target_namespace: qiyin
           target_registry: acr-chegndu-registry.cn-chengdu.cr.aliyuncs.com
-          acr_username: ${{ secrets.ACR_USERNAME }}
+          acr_username: ${{ vars.ACR_USERNAME }}
           acr_password: ${{ secrets.ACR_PASSWORD }}
 ```
 
-组织需要提供 `ACR_USERNAME` 和 `ACR_PASSWORD` 两个 Actions secrets，并授权调用仓库使用此 action。
+组织需要提供 Actions variable `ACR_USERNAME` 和 Actions secret `ACR_PASSWORD`，并授权调用仓库使用它们。
 
 `source_username` 和 `source_password` 必须同时提供或同时留空。两者留空时，Docker Hub 等公开源仓库使用匿名读取；对于 `ghcr.io`，action 会自动回退到调用方的 `GITHUB_TOKEN`，因此调用方需要授予 `packages: read`。
 
@@ -59,7 +59,7 @@ jobs:
 
 本仓库提供 `.github/workflows/sync-image.yml`。该 workflow 支持 `workflow_dispatch`，可从 Actions 页面手动填写源镜像、tag 和目标 namespace；`target_registry` 在这里默认使用 `acr-chegndu-registry.cn-chengdu.cr.aliyuncs.com`。
 
-手动 workflow 会检出用户选择的本仓库 ref，再通过 `uses: ./` 调用同一版本的 composite action。它只读取目标 ACR 的组织 secrets `ACR_USERNAME` 和 `ACR_PASSWORD`，不绑定任何通用源仓库凭据。公共源使用匿名读取；GHCR 源仍可由 action 按域名自动使用调用方的 `GITHUB_TOKEN`。
+手动 workflow 会检出用户选择的本仓库 ref，再通过 `uses: ./` 调用同一版本的 composite action。它读取目标 ACR 的组织 variable `ACR_USERNAME` 和组织 secret `ACR_PASSWORD`，不绑定任何通用源仓库凭据。公共源使用匿名读取；GHCR 源仍可由 action 按域名自动使用调用方的 `GITHUB_TOKEN`。
 
 ## 单镜像脚本
 

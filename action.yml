@@ -21,7 +21,7 @@ inputs:
     description: Optional source registry password or token; leave empty for public images
     required: false
   acr_username:
-    description: ACR username, normally passed from secrets.ACR_USERNAME
+    description: ACR username, normally passed from vars.ACR_USERNAME
     required: true
   acr_password:
     description: ACR password, normally passed from secrets.ACR_PASSWORD

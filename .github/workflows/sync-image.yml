@@ -42,5 +42,5 @@ jobs:
           tag: ${{ inputs.tag }}
           target_namespace: ${{ inputs.target_namespace }}
           target_registry: ${{ inputs.target_registry }}
-          acr_username: ${{ secrets.ACR_USERNAME }}
+          acr_username: ${{ vars.ACR_USERNAME }}
           acr_password: ${{ secrets.ACR_PASSWORD }}
