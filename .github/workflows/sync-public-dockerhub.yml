@@ -1,0 +1,120 @@
+name: Sync public Docker Hub images to ACR
+run-name: Sync public Docker Hub images (${{ inputs.arch }}) to ${{ inputs.target_namespace }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: Architecture to copy, e.g. amd64 or arm64
+        required: true
+        default: amd64
+        type: string
+      target_namespace:
+        description: Target ACR namespace, e.g. public
+        required: true
+        default: public
+        type: string
+      target_registry:
+        description: Target ACR hostname, e.g. acr-chegndu-registry.cn-chengdu.cr.aliyuncs.com
+        required: false
+        default: acr-chegndu-registry.cn-chengdu.cr.aliyuncs.com
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: Sync configured images
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out acr-sync
+        uses: actions/checkout@v7
+
+      - name: Install Skopeo
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v skopeo >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --yes skopeo
+          fi
+          skopeo --version
+
+      - name: Authenticate and sync configured images
+        shell: bash
+        env:
+          ARCH: ${{ inputs.arch }}
+          TARGET_NAMESPACE: ${{ inputs.target_namespace }}
+          TARGET_REGISTRY: ${{ inputs.target_registry }}
+          ACR_USERNAME: ${{ vars.ACR_USERNAME }}
+          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          [[ -n "${ARCH}" ]] || {
+            echo "error: arch is required" >&2
+            exit 1
+          }
+          [[ -n "${TARGET_NAMESPACE}" ]] || {
+            echo "error: target_namespace is required" >&2
+            exit 1
+          }
+          [[ -n "${TARGET_REGISTRY}" ]] || {
+            echo "error: target_registry is required" >&2
+            exit 1
+          }
+          [[ -n "${ACR_USERNAME}" ]] || {
+            echo "error: vars.ACR_USERNAME is required" >&2
+            exit 1
+          }
+          [[ -n "${ACR_PASSWORD}" ]] || {
+            echo "error: secrets.ACR_PASSWORD is required" >&2
+            exit 1
+          }
+
+          target_registry="${TARGET_REGISTRY#https://}"
+          target_registry="${target_registry#http://}"
+          target_registry="${target_registry%/}"
+          target_namespace="${TARGET_NAMESPACE#/}"
+          target_namespace="${target_namespace%/}"
+
+          [[ "${ARCH}" =~ ^[a-z0-9][a-z0-9_-]*$ ]] || {
+            echo "error: arch is not a valid architecture name" >&2
+            exit 1
+          }
+          [[ "${target_namespace}" =~ ^[a-z0-9]+([._-][a-z0-9]+)*(/[a-z0-9]+([._-][a-z0-9]+)*)*$ ]] || {
+            echo "error: target_namespace is not a valid lowercase repository path" >&2
+            exit 1
+          }
+          [[ -n "${target_registry}" && "${target_registry}" != */* ]] || {
+            echo "error: target_registry must be a registry hostname without a path" >&2
+            exit 1
+          }
+
+          auth_dir="$(mktemp -d "${RUNNER_TEMP}/acr-sync-auth.XXXXXX")"
+          auth_file="${auth_dir}/auth.json"
+          cleanup() {
+            rm -f "${auth_file}"
+            rmdir "${auth_dir}" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          printf '%s' "${ACR_PASSWORD}" |
+            skopeo login \
+              --authfile "${auth_file}" \
+              --username "${ACR_USERNAME}" \
+              --password-stdin \
+              "${target_registry}"
+
+          skopeo sync \
+            --src yaml \
+            --dest docker \
+            --authfile "${auth_file}" \
+            --override-arch "${ARCH}" \
+            --preserve-digests \
+            --keep-going \
+            --retry-times 3 \
+            skopeo-sync.yaml \
+            "${target_registry}/${target_namespace}"

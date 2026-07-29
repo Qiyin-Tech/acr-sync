@@ -62,6 +62,37 @@ jobs:
 
 手动 workflow 会检出用户选择的本仓库 ref，再通过 `uses: ./` 调用同一版本的 composite action。它读取目标 ACR 的组织 variable `ACR_USERNAME` 和组织 secret `ACR_PASSWORD`，不绑定任何通用源仓库凭据。公共源使用匿名读取；GHCR 源仍可由 action 按域名自动使用调用方的 `GITHUB_TOKEN`。
 
+## 批量同步公共 Docker Hub 镜像
+
+仓库根目录的 `skopeo-sync.yaml` 使用 Skopeo 原生 YAML source schema，不是本仓库自定义格式：
+
+```yaml
+docker.io:
+  images:
+    library/nginx:
+      - "stable-alpine3.24-perl"
+```
+
+- Docker Hub 官方镜像使用 `library/<name>`，例如 `library/nginx`。
+- 普通公共仓库保留其 Docker Hub namespace，例如 `bitnami/postgresql`。
+- tag 建议始终使用字符串引号。
+- 不要用空数组，Skopeo 将其解释为同步该 repository 的所有 tags。
+
+`.github/workflows/sync-public-dockerhub.yml` 从 Actions 页面手动触发，直接运行：
+
+```bash
+skopeo sync \
+  --src yaml \
+  --dest docker \
+  --override-arch amd64 \
+  --preserve-digests \
+  --keep-going \
+  skopeo-sync.yaml \
+  acr-chegndu-registry.cn-chengdu.cr.aliyuncs.com/public
+```
+
+workflow 默认同步 `amd64` 到 namespace `public`。Skopeo 会将 `docker.io/library/nginx` 映射为目标 repository `public/nginx`，并在同一进程内同步配置中的所有 tags。不同源 repository 若 basename 相同会映射到同一目标 repository；当前原生配置不支持自定义目标名，出现实际冲突时应拆分目标 namespace 或评估 Skopeo 的 `--scoped`。
+
 ## 复制与 layer 复用
 
 Composite Action 直接调用 Skopeo：
@@ -78,4 +109,4 @@ Skopeo 会按 digest 检查目标 repository 中的 layer。已有 layer 直接�
 
 Composite Action 默认同步 `amd64`，调用方可用 `arch: arm64` 显式覆盖。它没有 Registry 默认值；成都 ACR 地址只存在于手动 workflow 的调用表单中。
 
-仓库的职责边界、候选方案和未来批量同步扩展点见 [`docs/architecture.md`](docs/architecture.md)。
+仓库的职责边界、候选方案和批量同步约束见 [`docs/architecture.md`](docs/architecture.md)。

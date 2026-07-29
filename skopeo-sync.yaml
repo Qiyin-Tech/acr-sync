@@ -1,0 +1,4 @@
+docker.io:
+  images:
+    library/nginx:
+      - "stable-alpine3.24-perl"

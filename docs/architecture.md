@@ -2,7 +2,7 @@
 
 ## Goal and constraints
 
-The current product task is to copy one tagged image to ACR through a reusable GitHub composite action. The next known task is repository-owned manifest batch synchronization, including public Docker Hub images.
+The repository supports two related tasks: copying one tagged image through a reusable GitHub composite action, and synchronizing a repository-owned list of public Docker Hub images.
 
 The design keeps these constraints explicit:
 
@@ -27,9 +27,11 @@ versioned composite action        public contract and runner integration
     |
     +---------------------------> ACR
 
-future batch workflow/script
-    |                             native Skopeo YAML, scheduling, summary
-    +---- invokes skopeo sync for grouped repositories and tags
+repository batch workflow          organization policy and scheduling
+    |
+skopeo-sync.yaml                  native Skopeo source contract
+    |
+    +---- skopeo sync ----------> Docker Hub and ACR
 ```
 
 ### Composite action
@@ -57,15 +59,21 @@ The action defaults `arch` to `amd64` and requires `target_registry` explicitly.
 | Versioned composite action invokes `skopeo copy` directly | High | Good | One versioned action contract | Batch can use native `skopeo sync` | Chosen |
 | Build a general manifest engine now | Low | Good | Unclear until manifest contract exists | Predicts unconfirmed schema and policy | Deferred |
 
-## Future batch boundary
+## Public Docker Hub batch boundary
 
-The preferred batch manifest is Skopeo's native YAML source format. The batch layer should own only:
+`skopeo-sync.yaml` is parsed directly by `skopeo sync --src yaml`; this repository does not define a second schema or write a manifest adapter. The YAML owns only source registry, repository, and tag selection. It must not contain credentials or target policy.
+
+The repository-local batch workflow owns:
 
 - workflow scheduling and organization defaults;
 - credential mapping;
-- invocation summary and failure reporting.
+- target Registry and namespace;
+- the selected single architecture;
+- Skopeo retry and keep-going behavior.
 
-Native `skopeo sync --src yaml --dest docker` should copy grouped repositories and tags in one process. This retains Registry-side layer reuse and reduces repeated process, authentication, and connection setup. A custom manifest engine is justified only if required target mappings cannot be represented by Skopeo's native model.
+Native `skopeo sync --src yaml --dest docker` copies grouped repositories and tags in one process. This retains Registry-side layer reuse and reduces repeated process, authentication, and connection setup.
+
+Without `--scoped`, Skopeo appends each source repository basename to the destination. This matches the current target contract but creates a collision if two configured repositories share a basename. `--scoped` preserves the full source path but changes target names. A custom manifest engine is justified only if a real requirement needs per-image target mappings that neither behavior can represent.
 
 ## Re-evaluation triggers
 
