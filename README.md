@@ -17,7 +17,7 @@
 | `ACR_USERNAME` | Actions variable | ACR 登录用户名 |
 | `ACR_PASSWORD` | Actions secret | ACR 登录密码 |
 
-`ACR_ENDPOINT` 可以带 `http://` 或 `https://`，但不能包含 repository path。它不是 action input，调用 composite action 时应映射为 step 环境变量。
+`ACR_ENDPOINT` 可以带 `http://` 或 `https://`，但不能包含 repository path。调用 composite action 时通过 `acr_endpoint` input 传入。
 
 ## 单镜像 composite action
 
@@ -29,6 +29,7 @@
 | `tag` | 是 | - | 源 tag；目标使用同一个 tag |
 | `arch` | 否 | `amd64` | 单个目标架构，例如 `amd64` 或 `arm64` |
 | `target_namespace` | 是 | - | ACR namespace，例如 `qiyin` 或 `public` |
+| `acr_endpoint` | 是 | - | ACR registry hostname，通常传入 `${{ vars.ACR_ENDPOINT }}` |
 | `source_username` | 否 | 空 | 可选的源 Registry 用户名 |
 | `source_password` | 否 | 空 | 可选的源 Registry 密码或 token |
 | `acr_username` | 是 | - | ACR 用户名，通常传入 `${{ vars.ACR_USERNAME }}` |
@@ -63,12 +64,11 @@ jobs:
       - name: Sync image
         id: sync
         uses: Qiyin-Tech/acr-sync@v1
-        env:
-          ACR_ENDPOINT: ${{ vars.ACR_ENDPOINT }}
         with:
           source: ghcr.io/qiyin-tech/orchestra-backend
           tag: v1.2.3
           target_namespace: qiyin
+          acr_endpoint: ${{ vars.ACR_ENDPOINT }}
           acr_username: ${{ vars.ACR_USERNAME }}
           acr_password: ${{ secrets.ACR_PASSWORD }}
 
@@ -96,9 +96,9 @@ ghcr.io/qiyin-tech/orchestra-backend:v1.2.3
 - `arch`，默认 `amd64`
 - `target_namespace`
 
-该 workflow 检出用户选择的本仓库 ref，然后通过 `uses: ./` 执行同一 ref 的 composite action。它不提供 ACR endpoint 或通用源仓库凭据输入：
+该 workflow 检出用户选择的本仓库 ref，然后通过 `uses: ./` 执行同一 ref 的 composite action。表单不提供 ACR endpoint 或通用源仓库凭据输入：
 
-- `ACR_ENDPOINT` 来自 `vars.ACR_ENDPOINT`，通过 step `env` 传给 action。
+- `acr_endpoint` input 来自 `vars.ACR_ENDPOINT`。
 - ACR 用户名和密码来自 `vars.ACR_USERNAME` 与 `secrets.ACR_PASSWORD`。
 - 公开源匿名读取；GHCR 使用当前 workflow 的 `GITHUB_TOKEN`。
 

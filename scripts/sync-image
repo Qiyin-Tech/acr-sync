@@ -11,7 +11,7 @@ SOURCE="${SOURCE:?error: SOURCE is required}"
 TAG="${TAG:?error: TAG is required}"
 ARCH="${ARCH:?error: ARCH is required}"
 TARGET_NAMESPACE="${TARGET_NAMESPACE:?error: TARGET_NAMESPACE is required}"
-ACR_ENDPOINT="${ACR_ENDPOINT:?error: vars.ACR_ENDPOINT is required}"
+ACR_ENDPOINT="${ACR_ENDPOINT:?error: acr_endpoint is required}"
 ACR_USERNAME="${ACR_USERNAME:?error: ACR_USERNAME is required}"
 ACR_PASSWORD="${ACR_PASSWORD:?error: ACR_PASSWORD is required}"
 
@@ -88,7 +88,7 @@ image_name="${source_image##*/}"
   exit 1
 }
 [[ -n "${acr_endpoint}" && "${acr_endpoint}" != */* ]] || {
-  echo "error: vars.ACR_ENDPOINT must be a registry hostname without a path" >&2
+  echo "error: acr_endpoint must be a registry hostname without a path" >&2
   exit 1
 }
 

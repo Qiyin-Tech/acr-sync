@@ -15,6 +15,9 @@ inputs:
   target_namespace:
     description: Target ACR namespace, e.g. qiyin or public
     required: true
+  acr_endpoint:
+    description: ACR registry hostname without a repository path, normally passed from vars.ACR_ENDPOINT
+    required: true
   source_username:
     description: Optional source registry username; leave empty for public images
     required: false
@@ -46,6 +49,7 @@ runs:
         TARGET_NAMESPACE: ${{ inputs.target_namespace }}
         SOURCE_USERNAME: ${{ inputs.source_username }}
         SOURCE_PASSWORD: ${{ inputs.source_password }}
+        ACR_ENDPOINT: ${{ inputs.acr_endpoint }}
         ACR_USERNAME: ${{ inputs.acr_username }}
         ACR_PASSWORD: ${{ inputs.acr_password }}
         GHCR_USERNAME: ${{ github.actor }}
