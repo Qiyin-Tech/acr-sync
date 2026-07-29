@@ -7,7 +7,7 @@ The current product task is to copy one tagged image to ACR through a reusable G
 The design keeps these constraints explicit:
 
 - `tag` is required; digest selection is not supported.
-- `arch` is required by the reusable action; the manual workflow defaults it to `amd64`.
+- The reusable action and manual workflow default `arch` to `amd64`; callers can explicitly select one other architecture.
 - A source tag is copied to the same target tag.
 - The target repository is `<target-registry>/<target-namespace>/<source-basename>`.
 - The target contains the selected single-platform manifest, not the source image index.
@@ -46,7 +46,7 @@ The repository-local manual workflow owns the organization defaults for architec
 
 The action invokes `skopeo copy` directly with `--override-arch`, `--preserve-digests`, and `--digestfile`. It does not use a repository-owned copy wrapper. Skopeo checks each selected-platform blob at the target repository and uploads only missing blobs. The digest file reports the copied single-platform manifest without two additional remote inspections.
 
-The action requires `arch` and `target_registry` explicitly. The `amd64` and Chengdu ACR defaults belong only to the manual workflow; they are organization policy rather than invariants of the copy operation.
+The action defaults `arch` to `amd64` and requires `target_registry` explicitly. The Chengdu ACR default belongs only to the manual workflow; it is organization policy rather than an invariant of the copy operation.
 
 ## Alternatives considered
 

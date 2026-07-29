@@ -10,7 +10,8 @@ inputs:
     required: true
   arch:
     description: Architecture to copy from a multi-platform image, e.g. amd64 or arm64
-    required: true
+    required: false
+    default: amd64
   target_namespace:
     description: Target ACR namespace, e.g. qiyin
     required: true

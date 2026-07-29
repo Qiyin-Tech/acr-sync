@@ -10,7 +10,7 @@
 | --- | --- | --- | --- |
 | `source` | 是 | - | 不带 tag 的源镜像，例如 `ghcr.io/qiyin-tech/orchestra-backend` 或 `docker.io/library/nginx` |
 | `tag` | 是 | - | 要同步的 tag；目标镜像使用相同 tag |
-| `arch` | 是 | - | 要同步的架构，例如 `amd64` 或 `arm64` |
+| `arch` | 否 | `amd64` | 要同步的架构，例如 `amd64` 或 `arm64`；一次只能指定一个 |
 | `target_namespace` | 是 | - | ACR namespace，例如 `qiyin` |
 | `target_registry` | 是 | - | ACR Registry 地址 |
 | `source_username` | 否 | 空 | 源 Registry 用户名；公开镜像留空 |
@@ -46,7 +46,6 @@ jobs:
         with:
           source: ghcr.io/qiyin-tech/orchestra-backend
           tag: v1.2.3
-          arch: amd64
           target_namespace: qiyin
           target_registry: acr-chegndu-registry.cn-chengdu.cr.aliyuncs.com
           acr_username: ${{ vars.ACR_USERNAME }}
@@ -77,6 +76,6 @@ skopeo copy \
 
 Skopeo 会按 digest 检查目标 repository 中的 layer。已有 layer 直接复用，只传输缺失 layer；`--preserve-digests` 保证复制过程中不改变所选单平台 manifest 的 digest。Action 使用 Skopeo 的 `--digestfile` 返回复制结果，不再额外执行远程 `inspect`。
 
-Composite Action 没有架构或 Registry 默认值；`amd64` 和成都 ACR 地址只存在于手动 workflow 的调用表单中。
+Composite Action 默认同步 `amd64`，调用方可用 `arch: arm64` 显式覆盖。它没有 Registry 默认值；成都 ACR 地址只存在于手动 workflow 的调用表单中。
 
 仓库的职责边界、候选方案和未来批量同步扩展点见 [`docs/architecture.md`](docs/architecture.md)。
