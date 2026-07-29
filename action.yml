@@ -14,6 +14,12 @@ inputs:
   target_registry:
     description: Target ACR hostname without scheme or path, e.g. acr-chegndu-registry.cn-chengdu.cr.aliyuncs.com
     required: true
+  source_username:
+    description: Optional source registry username; leave empty for public images
+    required: false
+  source_password:
+    description: Optional source registry password or token; leave empty for public images
+    required: false
   acr_username:
     description: ACR username, normally passed from secrets.ACR_USERNAME
     required: true
@@ -41,6 +47,8 @@ runs:
         TAG: ${{ inputs.tag }}
         TARGET_NAMESPACE: ${{ inputs.target_namespace }}
         TARGET_REGISTRY: ${{ inputs.target_registry }}
+        SOURCE_USERNAME: ${{ inputs.source_username }}
+        SOURCE_PASSWORD: ${{ inputs.source_password }}
         ACR_USERNAME: ${{ inputs.acr_username }}
         ACR_PASSWORD: ${{ inputs.acr_password }}
         GHCR_USERNAME: ${{ github.actor }}
@@ -57,6 +65,12 @@ runs:
           echo "error: acr_password is required" >&2
           exit 1
         }
+        if [[ -n "${SOURCE_USERNAME}" || -n "${SOURCE_PASSWORD}" ]]; then
+          [[ -n "${SOURCE_USERNAME}" && -n "${SOURCE_PASSWORD}" ]] || {
+            echo "error: source_username and source_password must be provided together" >&2
+            exit 1
+          }
+        fi
 
         auth_dir="$(mktemp -d "${RUNNER_TEMP}/acr-sync-auth.XXXXXX")"
         auth_file="${auth_dir}/auth.json"
@@ -66,13 +80,23 @@ runs:
         }
         trap cleanup EXIT
 
-        if [[ "${SOURCE}" == ghcr.io/* || "${SOURCE}" == docker://ghcr.io/* ]]; then
-          printf '%s' "${GHCR_TOKEN}" |
+        source_username="${SOURCE_USERNAME}"
+        source_password="${SOURCE_PASSWORD}"
+        if [[ -z "${source_username}" &&
+              ( "${SOURCE}" == ghcr.io/* || "${SOURCE}" == docker://ghcr.io/* ) ]]; then
+          source_username="${GHCR_USERNAME}"
+          source_password="${GHCR_TOKEN}"
+        fi
+
+        if [[ -n "${source_username}" ]]; then
+          source_without_transport="${SOURCE#docker://}"
+          source_registry="${source_without_transport%%/*}"
+          printf '%s' "${source_password}" |
             skopeo login \
               --authfile "${auth_file}" \
-              --username "${GHCR_USERNAME}" \
+              --username "${source_username}" \
               --password-stdin \
-              ghcr.io
+              "${source_registry}"
         fi
 
         target_registry="${TARGET_REGISTRY#https://}"

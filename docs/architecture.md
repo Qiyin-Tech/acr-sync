@@ -35,11 +35,13 @@ future batch workflow/script
 
 ### Composite action
 
-The root `action.yml` is the reusable contract and GitHub runner adapter. It owns required inputs, Skopeo availability, temporary credential-file lifecycle, GHCR authentication through the caller's `GITHUB_TOKEN`, and ACR authentication through explicitly passed organization secrets. Credentials are not command-line arguments and the temporary auth file is removed after each invocation.
+The root `action.yml` is the reusable contract and GitHub runner adapter. It owns required inputs, Skopeo availability, temporary credential-file lifecycle, optional source authentication, GHCR fallback authentication through the caller's `GITHUB_TOKEN`, and ACR authentication through explicitly passed organization secrets. Credentials are not command-line arguments and the temporary auth file is removed after each invocation.
+
+Source credentials form one optional pair. If both are absent, non-GHCR sources are read anonymously and GHCR falls back to the caller token. If both are present, the action derives the source Registry hostname from `source` and authenticates before copying. Supplying only one value is an input error.
 
 GitHub downloads the action and its scripts at the exact `@tag` or `@SHA` selected by the caller. This removes the cross-repository checkout problem and keeps the action metadata and script version together.
 
-The repository-local manual workflow owns the organization default for the Chengdu ACR address and maps organization secret names to action inputs. It checks out the selected repository ref and invokes the local action with `uses: ./`, so manual runs exercise the action and script from the same revision.
+The repository-local manual workflow owns the organization default for the Chengdu ACR address and maps only the target ACR organization secret names to action inputs. It does not bind generic source credentials because the manually entered source Registry is not fixed. Public sources are anonymous; GHCR can still use the action's domain-specific caller-token fallback. The workflow checks out the selected repository ref and invokes the local action with `uses: ./`, so manual runs exercise the action and script from the same revision.
 
 ### Single-image script
 
@@ -87,7 +89,6 @@ Native `skopeo sync` can be reconsidered if the future manifest maps directly to
 Revisit these boundaries when one of the following becomes real:
 
 - target tags must differ from source tags;
-- private non-GHCR sources require a stable organization secret contract;
 - target repository names can no longer be derived from the source basename;
 - batch execution needs cross-image dependency ordering or transactional semantics;
 - Skopeo installation time becomes a measured bottleneck and justifies a pinned runner image.
