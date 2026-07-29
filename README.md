@@ -78,7 +78,7 @@ docker.io:
 - tag 建议始终使用字符串引号。
 - 不要用空数组，Skopeo 将其解释为同步该 repository 的所有 tags。
 
-`.github/workflows/sync-public-dockerhub.yml` 仅监听 `main` 分支上的 `skopeo-sync.yaml` 变更，每次清单变更自动执行一次；同时保留 `workflow_dispatch` 作为人工重跑入口。它直接运行：
+`.github/workflows/sync-manifest.yml`（Actions 中名为 `sync-manifest`）仅监听 `main` 分支上的 `skopeo-sync.yaml` 变更，每次清单变更自动执行一次；同时保留 `workflow_dispatch` 作为人工重跑入口。它直接运行：
 
 ```bash
 skopeo sync \

@@ -1,5 +1,5 @@
-name: Sync public Docker Hub images to ACR
-run-name: Sync public Docker Hub images (${{ inputs.arch || 'amd64' }}) to ${{ inputs.target_namespace || 'public' }}
+name: sync-manifest
+run-name: sync-manifest (${{ inputs.arch || 'amd64' }}) to ${{ inputs.target_namespace || 'public' }}
 
 on:
   push:
