@@ -78,7 +78,7 @@ docker.io:
 - tag 建议始终使用字符串引号。
 - 不要用空数组，Skopeo 将其解释为同步该 repository 的所有 tags。
 
-`.github/workflows/sync-public-dockerhub.yml` 从 Actions 页面手动触发，直接运行：
+`.github/workflows/sync-public-dockerhub.yml` 仅监听 `main` 分支上的 `skopeo-sync.yaml` 变更，每次清单变更自动执行一次；同时保留 `workflow_dispatch` 作为人工重跑入口。它直接运行：
 
 ```bash
 skopeo sync \
@@ -91,7 +91,7 @@ skopeo sync \
   acr-chegndu-registry.cn-chengdu.cr.aliyuncs.com/public
 ```
 
-workflow 默认同步 `amd64` 到 namespace `public`。Skopeo 会将 `docker.io/library/nginx` 映射为目标 repository `public/nginx`，并在同一进程内同步配置中的所有 tags。不同源 repository 若 basename 相同会映射到同一目标 repository；当前原生配置不支持自定义目标名，出现实际冲突时应拆分目标 namespace 或评估 Skopeo 的 `--scoped`。
+自动触发和手动触发都默认同步 `amd64` 到 namespace `public`。同步任务串行执行，避免连续清单提交同时写相同 tags。Skopeo 会将 `docker.io/library/nginx` 映射为目标 repository `public/nginx`，并在同一进程内同步配置中的所有 tags。不同源 repository 若 basename 相同会映射到同一目标 repository；当前原生配置不支持自定义目标名，出现实际冲突时应拆分目标 namespace 或评估 Skopeo 的 `--scoped`。
 
 ## 复制与 layer 复用
 

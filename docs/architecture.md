@@ -65,7 +65,8 @@ The action defaults `arch` to `amd64` and requires `target_registry` explicitly.
 
 The repository-local batch workflow owns:
 
-- workflow scheduling and organization defaults;
+- the `main` branch path trigger for `skopeo-sync.yaml`, manual reruns, and serialization;
+- workflow-level organization defaults;
 - credential mapping;
 - target Registry and namespace;
 - the selected single architecture;

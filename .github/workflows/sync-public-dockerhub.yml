@@ -1,7 +1,12 @@
 name: Sync public Docker Hub images to ACR
-run-name: Sync public Docker Hub images (${{ inputs.arch }}) to ${{ inputs.target_namespace }}
+run-name: Sync public Docker Hub images (${{ inputs.arch || 'amd64' }}) to ${{ inputs.target_namespace || 'public' }}
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - skopeo-sync.yaml
   workflow_dispatch:
     inputs:
       arch:
@@ -22,6 +27,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: sync-public-dockerhub
+  cancel-in-progress: false
 
 jobs:
   sync:
@@ -45,9 +54,9 @@ jobs:
       - name: Authenticate and sync configured images
         shell: bash
         env:
-          ARCH: ${{ inputs.arch }}
-          TARGET_NAMESPACE: ${{ inputs.target_namespace }}
-          TARGET_REGISTRY: ${{ inputs.target_registry }}
+          ARCH: ${{ inputs.arch || 'amd64' }}
+          TARGET_NAMESPACE: ${{ inputs.target_namespace || 'public' }}
+          TARGET_REGISTRY: ${{ inputs.target_registry || 'acr-chegndu-registry.cn-chengdu.cr.aliyuncs.com' }}
           ACR_USERNAME: ${{ vars.ACR_USERNAME }}
           ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
         run: |

@@ -1,3 +1,4 @@
+# Native Skopeo YAML source. Keep every synchronized tag explicit.
 docker.io:
   images:
     library/nginx:
