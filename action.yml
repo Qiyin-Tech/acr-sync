@@ -1,0 +1,92 @@
+name: Sync image to ACR
+description: Copy one tagged container image to ACR with Skopeo
+
+inputs:
+  source:
+    description: Source image without a tag, e.g. ghcr.io/qiyin-tech/orchestra-backend
+    required: true
+  tag:
+    description: Source tag to copy, e.g. v1.2.3; the same tag is used in ACR
+    required: true
+  target_namespace:
+    description: Target ACR namespace, e.g. qiyin
+    required: true
+  target_registry:
+    description: Target ACR hostname without scheme or path, e.g. acr-chegndu-registry.cn-chengdu.cr.aliyuncs.com
+    required: true
+  acr_username:
+    description: ACR username, normally passed from secrets.ACR_USERNAME
+    required: true
+  acr_password:
+    description: ACR password, normally passed from secrets.ACR_PASSWORD
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install Skopeo
+      shell: bash
+      run: |
+        set -euo pipefail
+        if ! command -v skopeo >/dev/null 2>&1; then
+          sudo apt-get update
+          sudo apt-get install --yes skopeo
+        fi
+        skopeo --version
+
+    - name: Authenticate and sync image
+      shell: bash
+      env:
+        SOURCE: ${{ inputs.source }}
+        TAG: ${{ inputs.tag }}
+        TARGET_NAMESPACE: ${{ inputs.target_namespace }}
+        TARGET_REGISTRY: ${{ inputs.target_registry }}
+        ACR_USERNAME: ${{ inputs.acr_username }}
+        ACR_PASSWORD: ${{ inputs.acr_password }}
+        GHCR_USERNAME: ${{ github.actor }}
+        GHCR_TOKEN: ${{ github.token }}
+        SYNC_SCRIPT: ${{ github.action_path }}/scripts/sync-image.sh
+      run: |
+        set -euo pipefail
+
+        [[ -n "${ACR_USERNAME}" ]] || {
+          echo "error: acr_username is required" >&2
+          exit 1
+        }
+        [[ -n "${ACR_PASSWORD}" ]] || {
+          echo "error: acr_password is required" >&2
+          exit 1
+        }
+
+        auth_dir="$(mktemp -d "${RUNNER_TEMP}/acr-sync-auth.XXXXXX")"
+        auth_file="${auth_dir}/auth.json"
+        cleanup() {
+          rm -f "${auth_file}"
+          rmdir "${auth_dir}" 2>/dev/null || true
+        }
+        trap cleanup EXIT
+
+        if [[ "${SOURCE}" == ghcr.io/* || "${SOURCE}" == docker://ghcr.io/* ]]; then
+          printf '%s' "${GHCR_TOKEN}" |
+            skopeo login \
+              --authfile "${auth_file}" \
+              --username "${GHCR_USERNAME}" \
+              --password-stdin \
+              ghcr.io
+        fi
+
+        target_registry="${TARGET_REGISTRY#https://}"
+        target_registry="${target_registry#http://}"
+        target_registry="${target_registry%/}"
+        printf '%s' "${ACR_PASSWORD}" |
+          skopeo login \
+            --authfile "${auth_file}" \
+            --username "${ACR_USERNAME}" \
+            --password-stdin \
+            "${target_registry}"
+
+        REGISTRY_AUTH_FILE="${auth_file}" "${SYNC_SCRIPT}" \
+          --source "${SOURCE}" \
+          --tag "${TAG}" \
+          --target-namespace "${TARGET_NAMESPACE}" \
+          --target-registry "${TARGET_REGISTRY}"

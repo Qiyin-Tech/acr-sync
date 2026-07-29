@@ -1,0 +1,46 @@
+name: Sync one image to ACR
+run-name: Sync ${{ inputs.source }}:${{ inputs.tag }} to ${{ inputs.target_namespace }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: Source image without a tag, e.g. ghcr.io/qiyin-tech/orchestra-backend
+        required: true
+        type: string
+      tag:
+        description: Source tag to copy, e.g. v1.2.3
+        required: true
+        type: string
+      target_namespace:
+        description: Target ACR namespace, e.g. qiyin
+        required: true
+        type: string
+      target_registry:
+        description: Target ACR hostname, e.g. acr-chegndu-registry.cn-chengdu.cr.aliyuncs.com
+        required: false
+        default: acr-chegndu-registry.cn-chengdu.cr.aliyuncs.com
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  sync:
+    name: Sync image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out acr-sync
+        uses: actions/checkout@v7
+
+      - name: Sync image
+        uses: ./
+        with:
+          source: ${{ inputs.source }}
+          tag: ${{ inputs.tag }}
+          target_namespace: ${{ inputs.target_namespace }}
+          target_registry: ${{ inputs.target_registry }}
+          acr_username: ${{ secrets.ACR_USERNAME }}
+          acr_password: ${{ secrets.ACR_PASSWORD }}
