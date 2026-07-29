@@ -1,30 +1,50 @@
 # acr-sync
 
-使用 [Skopeo](https://github.com/podman-container-tools/skopeo) 将单个容器镜像的指定架构同步到阿里云 ACR。同步直接在两个 Registry 之间进行，不依赖 Docker daemon。
+使用 [Skopeo](https://github.com/podman-container-tools/skopeo) 将带 tag 的容器镜像同步到阿里云 ACR，不依赖 Docker daemon。
 
-## Composite action
+仓库提供两个入口：
 
-仓库根目录的 `action.yml` 是公共入口，入参如下：
+- 根目录 `action.yml`：供其他仓库复用，一次同步一个镜像的一个架构。
+- `.github/workflows/sync-manifest.yml`：按仓库内的 Skopeo manifest 批量同步。
+
+## 组织配置
+
+调用 workflow 必须能读取以下组织配置：
+
+| 名称 | 类型 | 用途 |
+| --- | --- | --- |
+| `ACR_ENDPOINT` | Actions variable | ACR endpoint，例如 `acr-chegndu-registry.cn-chengdu.cr.aliyuncs.com` |
+| `ACR_USERNAME` | Actions variable | ACR 登录用户名 |
+| `ACR_PASSWORD` | Actions secret | ACR 登录密码 |
+
+`ACR_ENDPOINT` 可以带 `http://` 或 `https://`，但不能包含 repository path。它不是 action input，调用 composite action 时应映射为 step 环境变量。
+
+## 单镜像 composite action
+
+### Inputs
 
 | 参数 | 必填 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `source` | 是 | - | 不带 tag 的源镜像，例如 `ghcr.io/qiyin-tech/orchestra-backend` 或 `docker.io/library/nginx` |
-| `tag` | 是 | - | 要同步的 tag；目标镜像使用相同 tag |
-| `arch` | 否 | `amd64` | 要同步的架构，例如 `amd64` 或 `arm64`；一次只能指定一个 |
-| `target_namespace` | 是 | - | ACR namespace，例如 `qiyin` |
-| `source_username` | 否 | 空 | 源 Registry 用户名；公开镜像留空 |
-| `source_password` | 否 | 空 | 源 Registry 密码或 token；公开镜像留空 |
-| `acr_username` | 是 | - | ACR 用户名，应从组织 Actions variable 传入 |
-| `acr_password` | 是 | - | ACR 密码，应从组织 Actions secret 传入 |
+| `source` | 是 | - | 不带 tag 或 digest 的源镜像，例如 `ghcr.io/qiyin-tech/orchestra-backend` 或 `docker.io/library/nginx` |
+| `tag` | 是 | - | 源 tag；目标使用同一个 tag |
+| `arch` | 否 | `amd64` | 单个目标架构，例如 `amd64` 或 `arm64` |
+| `target_namespace` | 是 | - | ACR namespace，例如 `qiyin` 或 `public` |
+| `source_username` | 否 | 空 | 可选的源 Registry 用户名 |
+| `source_password` | 否 | 空 | 可选的源 Registry 密码或 token |
+| `acr_username` | 是 | - | ACR 用户名，通常传入 `${{ vars.ACR_USERNAME }}` |
+| `acr_password` | 是 | - | ACR 密码，通常传入 `${{ secrets.ACR_PASSWORD }}` |
 
-目标镜像名取源镜像路径的最后一段。例如：
+`source_username` 和 `source_password` 必须同时填写或同时留空。公开 Docker Hub 镜像留空即可。源地址是 `ghcr.io` 且两者留空时，action 使用 `github.actor` 和当前 workflow 的 `GITHUB_TOKEN`。
 
-```text
-ghcr.io/qiyin-tech/orchestra-backend:v1.2.3
-  -> ${ACR_ENDPOINT}/qiyin/orchestra-backend:v1.2.3
-```
+### Output
 
-调用示例：
+| 名称 | 说明 |
+| --- | --- |
+| `digest` | 已复制的单平台 manifest digest |
+
+### 调用示例
+
+使用 `v1` 跟踪当前主版本；需要完全不可变的调用时，将 `@v1` 替换为具体 commit SHA：
 
 ```yaml
 name: Sync image to ACR
@@ -41,6 +61,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Sync image
+        id: sync
         uses: Qiyin-Tech/acr-sync@v1
         env:
           ACR_ENDPOINT: ${{ vars.ACR_ENDPOINT }}
@@ -50,35 +71,65 @@ jobs:
           target_namespace: qiyin
           acr_username: ${{ vars.ACR_USERNAME }}
           acr_password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Print copied digest
+        env:
+          DIGEST: ${{ steps.sync.outputs.digest }}
+        run: echo "${DIGEST}"
 ```
 
-组织需要提供 Actions variables `ACR_ENDPOINT`、`ACR_USERNAME` 和 Actions secret `ACR_PASSWORD`，并授权调用仓库使用它们。GitHub 不向 composite action metadata 暴露 `vars` context，因此调用 step 通过 `env` 映射 `vars.ACR_ENDPOINT`；它不是 `with` 输入，action 不提供 endpoint 参数。
+目标 repository 取源路径最后一段：
 
-`source_username` 和 `source_password` 必须同时提供或同时留空。两者留空时，Docker Hub 等公开源仓库使用匿名读取；对于 `ghcr.io`，action 会自动回退到调用方的 `GITHUB_TOKEN`，因此调用方需要授予 `packages: read`。
+```text
+ghcr.io/qiyin-tech/orchestra-backend:v1.2.3
+  -> ${ACR_ENDPOINT}/qiyin/orchestra-backend:v1.2.3
+```
 
-## 手动同步
+私有 GHCR package 必须允许调用仓库通过 Actions 访问；仅声明 `packages: read` 不会绕过 package 自身的访问控制。
 
-本仓库提供 `.github/workflows/sync-image.yml`。该 workflow 支持 `workflow_dispatch`，可从 Actions 页面手动填写源镜像、tag、架构和目标 namespace；`arch` 在工作流层默认使用 `amd64`。ACR 地址直接读取组织 variable `ACR_ENDPOINT`，不提供手动输入。
+## 本仓库手动同步单个镜像
 
-手动 workflow 会检出用户选择的本仓库 ref，再通过 `uses: ./` 调用同一版本的 composite action。它把组织 variable `ACR_ENDPOINT` 映射为 step 环境变量，并把 `ACR_USERNAME` 和组织 secret `ACR_PASSWORD` 映射为 action inputs；不绑定任何通用源仓库凭据。公共源使用匿名读取；GHCR 源仍可由 action 按域名自动使用调用方的 `GITHUB_TOKEN`。
+`.github/workflows/sync-image.yml` 提供 `workflow_dispatch`，表单只包含：
 
-## 基于 manifest 批量同步
+- `source`
+- `tag`
+- `arch`，默认 `amd64`
+- `target_namespace`
 
-`manifest/` 中的文件使用 Skopeo 原生 YAML source schema，不是本仓库自定义格式。例如 `manifest/dockerhub.yml`：
+该 workflow 检出用户选择的本仓库 ref，然后通过 `uses: ./` 执行同一 ref 的 composite action。它不提供 ACR endpoint 或通用源仓库凭据输入：
+
+- `ACR_ENDPOINT` 来自 `vars.ACR_ENDPOINT`，通过 step `env` 传给 action。
+- ACR 用户名和密码来自 `vars.ACR_USERNAME` 与 `secrets.ACR_PASSWORD`。
+- 公开源匿名读取；GHCR 使用当前 workflow 的 `GITHUB_TOKEN`。
+
+## Manifest 批量同步
+
+### 文件职责
+
+```text
+sync.yml                  alias、架构、目标 namespace、manifest 路径
+manifest/dockerhub.yml    Skopeo 原生 Docker Hub source manifest
+manifest/ghcr.yml         Skopeo 原生 GHCR source manifest
+```
+
+`manifest/*.yml` 直接交给 `skopeo sync --src yaml`，镜像列表不使用本仓库自定义 schema。例如：
 
 ```yaml
 docker.io:
   images:
     library/nginx:
       - "stable-alpine3.24-perl"
+    bitnami/postgresql:
+      - "17"
 ```
 
-- Docker Hub 官方镜像使用 `library/<name>`，例如 `library/nginx`。
-- 普通公共仓库保留其 Docker Hub namespace，例如 `bitnami/postgresql`。
-- tag 建议始终使用字符串引号。
-- 不要用空数组，Skopeo 将其解释为同步该 repository 的所有 tags。
+- Docker Hub 官方镜像写成 `library/<name>`。
+- 普通仓库保留 Docker Hub namespace。
+- tag 建议始终加引号。
+- 不要给 repository 配置空 tag 数组；Skopeo 会将其解释为同步全部 tags。
+- 凭据不得写入 manifest。
 
-根目录的 `sync.yml` 将可操作的 alias 映射到 manifest、架构列表和目标 namespace：
+`sync.yml` 当前配置为：
 
 ```yaml
 dockerhub:
@@ -86,40 +137,81 @@ dockerhub:
     - amd64
   target_namespace: public
   manifest_path: manifest/dockerhub.yml
+
+ghcr:
+  archs:
+    - amd64
+  target_namespace: qiyin
+  manifest_path: manifest/ghcr.yml
 ```
 
-`archs` 保持列表结构，供 workflow 统一生成 matrix；当前每个 alias 只允许一个架构。多个单架构 job 写同一目标 tag 时不会自动合并为多架构 index，因此 prepare 脚本会拒绝包含多个架构的 alias，避免最后一个 job 覆盖前面的结果。
+`manifest/ghcr.yml` 当前是空占位文件，尚未配置任何 GHCR 镜像。
 
-`.github/workflows/sync-manifest.yml` 在 `main` 的 `sync.yml` 或 `manifest/**` 发生变更时启动。push 触发时：
+### 自动与手动选择
 
-- `sync.yml` 变更会选择全部 alias；
-- manifest 变更只选择 `manifest_path` 指向该文件的 alias；
-- 每个 alias 的 `archs` 被展开为 Actions matrix。
+`.github/workflows/sync-manifest.yml` 监听 `main` 上的：
 
-手动触发时只填写 `sync.yml` 中的 `name`，例如 `dockerhub`。手动运行不检查 Git diff，总是强制执行该 alias。ACR 地址由 workflow 直接读取 `vars.ACR_ENDPOINT`。
+```yaml
+paths:
+  - sync.yml
+  - manifest/**
+```
 
-workflow YAML 只负责编排。`scripts/prepare-sync-matrix` 使用 runner 自带的 `yq` 读取 `sync.yml` 并生成 matrix；`scripts/sync-manifest` 处理临时认证文件后直接调用 `skopeo sync`。根 composite action 同样只保留输入和上下文映射，实际单镜像同步位于随 action 一起下载的 `scripts/sync-image`。同步任务在 workflow 层串行，避免连续清单提交同时写相同 tags。
+push 触发时，`scripts/prepare-sync-matrix` 根据本次 push 的 Git diff 选择 alias：
 
-push 选中的空 manifest 会打印 warning 并跳过，便于先登记尚未填充的 alias；手动指定空 manifest 会失败，因为手动触发表示强制执行。配置引用不存在的 manifest 始终是错误。
+- `sync.yml` 发生变更：选择全部 alias。
+- 某个 manifest 发生变更：只选择 `manifest_path` 指向该文件的 alias。
+- 被选中的空 manifest：打印 warning 并跳过。
+- 配置引用不存在的 manifest：失败。
 
-若 manifest 顶层包含 `ghcr.io`，脚本会自动使用 `github.actor` 和当前 workflow 的 `GITHUB_TOKEN` 登录；workflow 已声明 `packages: read`。私有 GHCR package 仍须在其 Actions access 设置中允许 `Qiyin-Tech/acr-sync` 仓库访问。凭据不写入 manifest 或 `sync.yml`。
+手动触发只填写 `sync.yml` 中的 alias `name`，例如 `dockerhub`。手动运行不读取 Git diff，强制执行该 alias；如果对应 manifest 为空则失败。
 
-Skopeo 会将 `docker.io/library/nginx` 映射为目标 repository `public/nginx`，并在同一进程内同步配置中的所有 tags。不同源 repository 若 basename 相同会映射到同一目标 repository；当前原生配置不支持自定义目标名，出现实际冲突时应拆分目标 namespace 或评估 Skopeo 的 `--scoped`。
+每个 alias 的 `archs` 会展开成 Actions matrix。当前代码只允许每个 alias 配置一个架构，因为多个单架构 job 写相同目标 tags 时只会互相覆盖，不会自动合并为多架构 index。
 
-## 复制与 layer 复用
+`concurrency.group: sync-manifest` 保证不同 workflow run 不会同时执行；同一次 run 内不同 alias 的 matrix jobs 仍可能并行。
 
-Composite Action 通过随 action 一起发布的 `scripts/sync-image` 调用 Skopeo：
+### 执行与认证
+
+workflow YAML 只负责 GitHub Actions 编排：
+
+- `scripts/prepare-sync-matrix` 使用 `git`、`yq` 和 `jq` 选择 alias 并输出 matrix。
+- `scripts/sync-manifest` 使用 `yq` 检查 manifest，创建临时认证文件，然后直接调用 `skopeo sync`。
+
+批量 workflow 直接读取：
+
+```yaml
+ACR_ENDPOINT: ${{ vars.ACR_ENDPOINT }}
+ACR_USERNAME: ${{ vars.ACR_USERNAME }}
+ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+```
+
+manifest 顶层包含 `ghcr.io` 时，脚本使用 `github.actor` 和当前 workflow 的 `GITHUB_TOKEN` 登录 GHCR。workflow 已声明 `packages: read`；私有 package 仍需允许 `Qiyin-Tech/acr-sync` 仓库访问。
+
+`ubuntu-latest` runner 必须提供 `git`、`jq`、mikefarah `yq` 和 Skopeo；缺少任一命令时批量任务会直接失败并报告缺失的命令。
+
+## 目标命名与 layer 复用
+
+单镜像 action 和 manifest 批量同步都保留源 tag。未使用 `skopeo sync --scoped` 时，批量同步使用源 repository 的 basename 作为目标 repository：
+
+```text
+docker.io/library/nginx:stable-alpine3.24-perl
+  -> ${ACR_ENDPOINT}/public/nginx:stable-alpine3.24-perl
+```
+
+如果两个源 repository 的 basename 相同，它们会写入同一个目标 repository；需要通过不同 `target_namespace` 避免冲突。
+
+单镜像脚本实际调用：
 
 ```bash
 skopeo copy \
-  --override-arch amd64 \
+  --authfile "${auth_file}" \
+  --override-arch "${ARCH}" \
   --preserve-digests \
-  docker://docker.io/library/nginx:stable-alpine3.24-perl \
-  "docker://${ACR_ENDPOINT}/public/nginx:stable-alpine3.24-perl"
+  --digestfile "${digest_file}" \
+  "docker://${source_image}:${TAG}" \
+  "docker://${acr_endpoint}/${target_namespace}/${image_name}:${TAG}"
 ```
 
-Skopeo 会按 digest 检查目标 repository 中的 layer。已有 layer 直接复用，只传输缺失 layer；`--preserve-digests` 保证复制过程中不改变所选单平台 manifest 的 digest。Action 使用 Skopeo 的 `--digestfile` 返回复制结果，不再额外执行远程 `inspect`。
+Skopeo 按 digest 查询目标 repository 中的 blobs，只上传缺失 layers。`--preserve-digests` 保持所选单平台 manifest digest；`--digestfile` 直接产生 action 的 `digest` output，不额外执行远程 `inspect`。
 
-Composite Action 默认同步 `amd64`，调用方可用 `arch: arm64` 显式覆盖。ACR endpoint 由调用 step 将组织 variable `ACR_ENDPOINT` 映射到同名环境变量，不是 action 输入。
-
-仓库的职责边界、候选方案和批量同步约束见 [`docs/architecture.md`](docs/architecture.md)。
+架构设计与边界说明见 [`docs/architecture.md`](docs/architecture.md)。
