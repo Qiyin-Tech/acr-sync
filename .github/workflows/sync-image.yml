@@ -37,6 +37,8 @@ jobs:
 
       - name: Sync image
         uses: ./
+        env:
+          ACR_ENDPOINT: ${{ vars.ACR_ENDPOINT }}
         with:
           source: ${{ inputs.source }}
           tag: ${{ inputs.tag }}

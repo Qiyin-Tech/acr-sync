@@ -45,13 +45,13 @@ Source credentials form one optional pair. If both are absent, non-GHCR sources 
 
 GitHub downloads the action and `scripts/sync-image` at the exact `@tag` or `@SHA` selected by the caller. The metadata invokes it through `github.action_path`, so no second checkout is required.
 
-The repository-local manual workflow owns the organization default for architecture. The composite action reads `vars.ACR_ENDPOINT` directly, while the workflow maps `vars.ACR_USERNAME` and `secrets.ACR_PASSWORD` to action inputs. It does not bind generic source credentials because the manually entered source Registry is not fixed. Public sources are anonymous; GHCR can still use the action's domain-specific caller-token fallback. The workflow checks out the selected repository ref and invokes the local action with `uses: ./`, so manual runs exercise the action from the same revision.
+The repository-local manual workflow owns the organization default for architecture. GitHub does not expose the `vars` context while evaluating composite action metadata, so the caller step maps `vars.ACR_ENDPOINT` to the inherited `ACR_ENDPOINT` environment variable. The workflow maps `vars.ACR_USERNAME` and `secrets.ACR_PASSWORD` to action inputs. It does not bind generic source credentials because the manually entered source Registry is not fixed. Public sources are anonymous; GHCR can still use the action's domain-specific caller-token fallback. The workflow checks out the selected repository ref and invokes the local action with `uses: ./`, so manual runs exercise the action from the same revision.
 
 ### Native single-image copy
 
 `scripts/sync-image` invokes `skopeo copy` with `--override-arch`, `--preserve-digests`, and `--digestfile`. It is a runner adapter, not a second copy engine: layer discovery and transfer remain native Skopeo behavior. Skopeo checks each selected-platform blob at the target repository and uploads only missing blobs. The digest file reports the copied single-platform manifest without two additional remote inspections.
 
-The action defaults `arch` to `amd64`. The ACR endpoint is fixed by the caller-visible organization variable `ACR_ENDPOINT`; it is not part of the public action input contract.
+The action defaults `arch` to `amd64`. The ACR endpoint is fixed by the caller-visible organization variable `ACR_ENDPOINT`, mapped to the action process environment by the caller step; it is not part of the public action input contract.
 
 ## Alternatives considered
 

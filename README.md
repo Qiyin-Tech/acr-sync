@@ -42,6 +42,8 @@ jobs:
     steps:
       - name: Sync image
         uses: Qiyin-Tech/acr-sync@v1
+        env:
+          ACR_ENDPOINT: ${{ vars.ACR_ENDPOINT }}
         with:
           source: ghcr.io/qiyin-tech/orchestra-backend
           tag: v1.2.3
@@ -50,7 +52,7 @@ jobs:
           acr_password: ${{ secrets.ACR_PASSWORD }}
 ```
 
-组织需要提供 Actions variables `ACR_ENDPOINT`、`ACR_USERNAME` 和 Actions secret `ACR_PASSWORD`，并授权调用仓库使用它们。`ACR_ENDPOINT` 是固定的组织策略，action 不提供覆盖它的输入。
+组织需要提供 Actions variables `ACR_ENDPOINT`、`ACR_USERNAME` 和 Actions secret `ACR_PASSWORD`，并授权调用仓库使用它们。GitHub 不向 composite action metadata 暴露 `vars` context，因此调用 step 通过 `env` 映射 `vars.ACR_ENDPOINT`；它不是 `with` 输入，action 不提供 endpoint 参数。
 
 `source_username` 和 `source_password` 必须同时提供或同时留空。两者留空时，Docker Hub 等公开源仓库使用匿名读取；对于 `ghcr.io`，action 会自动回退到调用方的 `GITHUB_TOKEN`，因此调用方需要授予 `packages: read`。
 
@@ -58,7 +60,7 @@ jobs:
 
 本仓库提供 `.github/workflows/sync-image.yml`。该 workflow 支持 `workflow_dispatch`，可从 Actions 页面手动填写源镜像、tag、架构和目标 namespace；`arch` 在工作流层默认使用 `amd64`。ACR 地址直接读取组织 variable `ACR_ENDPOINT`，不提供手动输入。
 
-手动 workflow 会检出用户选择的本仓库 ref，再通过 `uses: ./` 调用同一版本的 composite action。它读取目标 ACR 的组织 variable `ACR_USERNAME` 和组织 secret `ACR_PASSWORD`，不绑定任何通用源仓库凭据。公共源使用匿名读取；GHCR 源仍可由 action 按域名自动使用调用方的 `GITHUB_TOKEN`。
+手动 workflow 会检出用户选择的本仓库 ref，再通过 `uses: ./` 调用同一版本的 composite action。它把组织 variable `ACR_ENDPOINT` 映射为 step 环境变量，并把 `ACR_USERNAME` 和组织 secret `ACR_PASSWORD` 映射为 action inputs；不绑定任何通用源仓库凭据。公共源使用匿名读取；GHCR 源仍可由 action 按域名自动使用调用方的 `GITHUB_TOKEN`。
 
 ## 基于 manifest 批量同步
 
@@ -118,6 +120,6 @@ skopeo copy \
 
 Skopeo 会按 digest 检查目标 repository 中的 layer。已有 layer 直接复用，只传输缺失 layer；`--preserve-digests` 保证复制过程中不改变所选单平台 manifest 的 digest。Action 使用 Skopeo 的 `--digestfile` 返回复制结果，不再额外执行远程 `inspect`。
 
-Composite Action 默认同步 `amd64`，调用方可用 `arch: arm64` 显式覆盖。ACR endpoint 直接来自调用方可见的组织 variable `ACR_ENDPOINT`，不是 action 输入。
+Composite Action 默认同步 `amd64`，调用方可用 `arch: arm64` 显式覆盖。ACR endpoint 由调用 step 将组织 variable `ACR_ENDPOINT` 映射到同名环境变量，不是 action 输入。
 
 仓库的职责边界、候选方案和批量同步约束见 [`docs/architecture.md`](docs/architecture.md)。
