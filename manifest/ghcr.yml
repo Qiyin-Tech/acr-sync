@@ -1,1 +1,41 @@
-{}
+ghcr.io:
+  images:
+    qiyin-tech/conductor-server:
+      - "3.22.3-opensearch2"
+    qiyin-tech/conductor-ui:
+      - "3.22.3-consul-srv-test2"
+    qiyin-tech/opensearch:
+      - "2.18.0-icu"
+    qiyin-tech/orchestra-backend:
+      - "v0.0.1"
+      - "v0.0.4"
+      - "v0.0.5"
+      - "v0.0.5-0e0fc6c7a29db7c1aebe65987b00547b96904721"
+    qiyin-tech/orchestra-frontend:
+      - "v0.0.3"
+      - "v0.0.6"
+      - "v0.0.6-097f5bf956349a69b5d72cb3d67dac6b896dfeb7"
+    qiyin-tech/workers-lyrics-generation-worker:
+      - "sha-85e04fd5a388651175bd0db64dc73e62ed1ca0f7"
+      - "v0.3.3"
+      - "v0.4.1"
+    qiyin-tech/workers-rvc-proxy-worker:
+      - "sha-85e04fd5a388651175bd0db64dc73e62ed1ca0f7"
+      - "v0.1.0"
+      - "v0.2.1"
+    qiyin-tech/workers-suno-cover-worker:
+      - "sha-85e04fd5a388651175bd0db64dc73e62ed1ca0f7"
+      - "v0.4.0"
+      - "v0.5.1"
+    qiyin-tech/workers-suno-inspo-worker:
+      - "sha-85e04fd5a388651175bd0db64dc73e62ed1ca0f7"
+      - "v0.4.0"
+      - "v0.5.1"
+    qiyin-tech/workers-suno-prompt-worker:
+      - "sha-85e04fd5a388651175bd0db64dc73e62ed1ca0f7"
+      - "v0.4.0"
+      - "v0.5.1"
+    qiyin-tech/workers-suno-sample-worker:
+      - "sha-85e04fd5a388651175bd0db64dc73e62ed1ca0f7"
+      - "v0.4.0"
+      - "v0.5.1"

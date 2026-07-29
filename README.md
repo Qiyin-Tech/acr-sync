@@ -145,7 +145,7 @@ ghcr:
   manifest_path: manifest/ghcr.yml
 ```
 
-`manifest/ghcr.yml` 当前是空占位文件，尚未配置任何 GHCR 镜像。
+`manifest/ghcr.yml` 当前包含 `~/code/nomad-packs` 的 `main`、`dev` 和全部 Git tags 中出现过的全部默认 GHCR repository/tag。
 
 ### 自动与手动选择
 
