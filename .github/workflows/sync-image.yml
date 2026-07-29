@@ -1,16 +1,21 @@
 name: Sync one image to ACR
-run-name: Sync ${{ inputs.source }}:${{ inputs.tag }} to ${{ inputs.target_namespace }}
+run-name: Sync ${{ inputs.source }}:${{ inputs.tag }} (${{ inputs.arch }}) to ${{ inputs.target_namespace }}
 
 on:
   workflow_dispatch:
     inputs:
       source:
-        description: Source image without a tag, e.g. ghcr.io/qiyin-tech/orchestra-backend
+        description: Source image without a tag, e.g. ghcr.io/qiyin-tech/orchestra-backend or docker.io/library/nginx
         required: true
         type: string
       tag:
         description: Source tag to copy, e.g. v1.2.3
         required: true
+        type: string
+      arch:
+        description: Architecture to copy, e.g. amd64 or arm64
+        required: true
+        default: amd64
         type: string
       target_namespace:
         description: Target ACR namespace, e.g. qiyin
@@ -40,6 +45,7 @@ jobs:
         with:
           source: ${{ inputs.source }}
           tag: ${{ inputs.tag }}
+          arch: ${{ inputs.arch }}
           target_namespace: ${{ inputs.target_namespace }}
           target_registry: ${{ inputs.target_registry }}
           acr_username: ${{ vars.ACR_USERNAME }}
