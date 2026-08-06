@@ -7,6 +7,10 @@ command -v oras >/dev/null 2>&1 || {
 }
 oras version
 
+# The configured ACR endpoint resets ORAS HTTP/2 streams during large blob
+# uploads. Use HTTP/1.1 for this path so a binary layer can complete.
+export GODEBUG="${GODEBUG:+${GODEBUG},}http2client=0"
+
 SOURCE="${SOURCE:?error: SOURCE is required}"
 TAG="${TAG:?error: TAG is required}"
 TARGET_NAMESPACE="${TARGET_NAMESPACE:?error: TARGET_NAMESPACE is required}"
