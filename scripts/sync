@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+case "${KIND:-image}" in
+  image)
+    exec "${ACTION_PATH}/scripts/sync-image"
+    ;;
+  artifact)
+    exec "${ACTION_PATH}/scripts/sync-artifact"
+    ;;
+  *)
+    echo "error: KIND must be image or artifact" >&2
+    exit 1
+    ;;
+esac

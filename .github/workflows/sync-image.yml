@@ -1,11 +1,19 @@
 name: Sync one image to ACR
-run-name: Sync ${{ inputs.source }}:${{ inputs.tag }} (${{ inputs.arch }}) to ${{ inputs.target_namespace }}
+run-name: Sync ${{ inputs.source }}:${{ inputs.tag }} (${{ inputs.kind }}) to ${{ inputs.target_namespace }}
 
 on:
   workflow_dispatch:
     inputs:
+      kind:
+        description: Content kind, image or artifact
+        required: true
+        default: image
+        type: choice
+        options:
+          - image
+          - artifact
       source:
-        description: Source image without a tag, e.g. ghcr.io/qiyin-tech/orchestra-backend or docker.io/library/nginx
+        description: Source repository without a tag, e.g. ghcr.io/qiyin-tech/orchestra-backend or ghcr.io/qiyin-tech/1.0-renderer
         required: true
         type: string
       tag:
@@ -24,10 +32,11 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
   sync:
-    name: Sync image
+    name: Sync content
     runs-on: ubuntu-latest
 
     steps:
@@ -37,6 +46,7 @@ jobs:
       - name: Sync image
         uses: ./
         with:
+          kind: ${{ inputs.kind }}
           source: ${{ inputs.source }}
           tag: ${{ inputs.tag }}
           arch: ${{ inputs.arch }}

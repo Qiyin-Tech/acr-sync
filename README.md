@@ -1,6 +1,6 @@
 # acr-sync
 
-使用 [Skopeo](https://github.com/podman-container-tools/skopeo) 将带 tag 的容器镜像同步到阿里云 ACR，不依赖 Docker daemon。
+使用 [Skopeo](https://github.com/podman-container-tools/skopeo) 或 [ORAS](https://oras.land/) 将带 tag 的容器镜像/OCI artifact 同步到阿里云 ACR，不依赖 Docker daemon。
 
 仓库提供两个入口：
 
@@ -19,13 +19,14 @@
 
 `ACR_ENDPOINT` 可以带 `http://` 或 `https://`，但不能包含 repository path。调用 composite action 时通过 `acr_endpoint` input 传入。
 
-## 单镜像 composite action
+## 单内容 composite action
 
 ### Inputs
 
 | 参数 | 必填 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `source` | 是 | - | 不带 tag 或 digest 的源镜像，例如 `ghcr.io/qiyin-tech/orchestra-backend` 或 `docker.io/library/nginx` |
+| `kind` | 否 | `image` | `image` 使用 Skopeo；`artifact` 使用 ORAS 复制 OCI artifact |
+| `source` | 是 | - | 不带 tag 或 digest 的源仓库，例如 `ghcr.io/qiyin-tech/orchestra-backend` 或 `ghcr.io/qiyin-tech/1.0-renderer` |
 | `tag` | 是 | - | 源 tag；目标使用同一个 tag |
 | `arch` | 否 | `amd64` | 单个目标架构，例如 `amd64` 或 `arm64` |
 | `target_namespace` | 是 | - | ACR namespace，例如 `qiyin` 或 `public` |
@@ -41,7 +42,7 @@
 
 | 名称 | 说明 |
 | --- | --- |
-| `digest` | 已复制的单平台 manifest digest |
+| `digest` | 已复制的 image/artifact manifest digest |
 
 ### 调用示例
 
@@ -65,6 +66,7 @@ jobs:
         id: sync
         uses: Qiyin-Tech/acr-sync@v1
         with:
+          kind: image
           source: ghcr.io/qiyin-tech/orchestra-backend
           tag: v1.2.3
           target_namespace: qiyin
@@ -84,6 +86,25 @@ jobs:
 ghcr.io/qiyin-tech/orchestra-backend:v1.2.3
   -> ${ACR_ENDPOINT}/qiyin/orchestra-backend:v1.2.3
 ```
+
+同步 GHCR OCI artifact 时，`source` 和 `tag` 仍然指向 GHCR package，`target_namespace` 可以使用独立的 `binary` namespace：
+
+```yaml
+- name: Sync binary artifact to ACR
+  uses: Qiyin-Tech/acr-sync@v1
+  with:
+    kind: artifact
+    source: ghcr.io/qiyin-tech/1.0-renderer
+    tag: v1.0.0
+    target_namespace: binary
+    source_username: ${{ github.actor }}
+    source_password: ${{ github.token }}
+    acr_endpoint: ${{ vars.ACR_ENDPOINT }}
+    acr_username: ${{ vars.ACR_USERNAME }}
+    acr_password: ${{ secrets.ACR_PASSWORD }}
+```
+
+目标为 `${ACR_ENDPOINT}/binary/1.0-renderer:v1.0.0`。artifact 的 manifest 和 zip layer 由 ORAS 原样复制；它不是 Docker image，因此不会使用 BuildKit 的容器分层缓存，但 Registry 仍会按 blob digest 复用已存在的内容。GHCR 等私有源需要凭据，公开 OCI registry 可以匿名读取。
 
 私有 GHCR package 必须允许调用仓库通过 Actions 访问；仅声明 `packages: read` 不会绕过 package 自身的访问控制。
 
