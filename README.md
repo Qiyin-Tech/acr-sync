@@ -1,6 +1,6 @@
 # acr-sync
 
-使用 [Skopeo](https://github.com/podman-container-tools/skopeo) 将带 tag 的容器镜像同步到阿里云 ACR，不依赖 Docker daemon。
+使用 [Skopeo](https://github.com/podman-container-tools/skopeo) 或 [ORAS](https://oras.land/) 将带 tag 的容器镜像/OCI artifact 同步到阿里云 ACR，不依赖 Docker daemon。
 
 仓库提供两个入口：
 
@@ -19,13 +19,14 @@
 
 `ACR_ENDPOINT` 可以带 `http://` 或 `https://`，但不能包含 repository path。调用 composite action 时通过 `acr_endpoint` input 传入。
 
-## 单镜像 composite action
+## 单内容 composite action
 
 ### Inputs
 
 | 参数 | 必填 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `source` | 是 | - | 不带 tag 或 digest 的源镜像，例如 `ghcr.io/qiyin-tech/orchestra-backend` 或 `docker.io/library/nginx` |
+| `kind` | 否 | `image` | `image` 使用 Skopeo；`artifact` 使用 ORAS 复制 OCI artifact |
+| `source` | 是 | - | 不带 tag 或 digest 的源仓库，例如 `ghcr.io/qiyin-tech/orchestra-backend` 或 `ghcr.io/qiyin-tech/1.0-renderer` |
 | `tag` | 是 | - | 源 tag；目标使用同一个 tag |
 | `arch` | 否 | `amd64` | 单个目标架构，例如 `amd64` 或 `arm64` |
 | `target_namespace` | 是 | - | ACR namespace，例如 `qiyin` 或 `public` |
@@ -41,7 +42,7 @@
 
 | 名称 | 说明 |
 | --- | --- |
-| `digest` | 已复制的单平台 manifest digest |
+| `digest` | 已复制的 image/artifact manifest digest |
 
 ### 调用示例
 
@@ -65,6 +66,7 @@ jobs:
         id: sync
         uses: Qiyin-Tech/acr-sync@v1
         with:
+          kind: image
           source: ghcr.io/qiyin-tech/orchestra-backend
           tag: v1.2.3
           target_namespace: qiyin
@@ -84,6 +86,25 @@ jobs:
 ghcr.io/qiyin-tech/orchestra-backend:v1.2.3
   -> ${ACR_ENDPOINT}/qiyin/orchestra-backend:v1.2.3
 ```
+
+同步 GHCR OCI artifact 时，`source` 和 `tag` 仍然指向 GHCR package，`target_namespace` 可以使用独立的 `binary` namespace：
+
+```yaml
+- name: Sync binary artifact to ACR
+  uses: Qiyin-Tech/acr-sync@v1
+  with:
+    kind: artifact
+    source: ghcr.io/qiyin-tech/1.0-renderer
+    tag: v1.0.0
+    target_namespace: binary
+    source_username: ${{ github.actor }}
+    source_password: ${{ github.token }}
+    acr_endpoint: ${{ vars.ACR_ENDPOINT }}
+    acr_username: ${{ vars.ACR_USERNAME }}
+    acr_password: ${{ secrets.ACR_PASSWORD }}
+```
+
+目标为 `${ACR_ENDPOINT}/binary/1.0-renderer:v1.0.0`。artifact 的 manifest 和 zip layer 由 ORAS 原样复制；它不是 Docker image，因此不会使用 BuildKit 的容器分层缓存，但 Registry 仍会按 blob digest 复用已存在的内容。GHCR 等私有源需要凭据，公开 OCI registry 可以匿名读取。
 
 私有 GHCR package 必须允许调用仓库通过 Actions 访问；仅声明 `packages: read` 不会绕过 package 自身的访问控制。
 
@@ -110,7 +131,7 @@ ghcr.io/qiyin-tech/orchestra-backend:v1.2.3
 
 ```text
 sync.yml                  alias、架构、目标 namespace、manifest 路径
-manifest/dockerhub.yml    Skopeo 原生 Docker Hub source manifest
+manifest/public.yml       Skopeo 原生公开 Docker Hub / GHCR source manifest
 manifest/ghcr.yml         Skopeo 原生 GHCR source manifest
 ```
 
@@ -134,11 +155,11 @@ docker.io:
 `sync.yml` 当前配置为：
 
 ```yaml
-dockerhub:
+public:
   archs:
     - amd64
   target_namespace: public
-  manifest_path: manifest/dockerhub.yml
+  manifest_path: manifest/public.yml
 
 ghcr:
   archs:
@@ -166,7 +187,7 @@ push 触发时，`scripts/prepare-sync-matrix` 根据本次 push 的 Git diff �
 - 被选中的空 manifest：打印 warning 并跳过。
 - 配置引用不存在的 manifest：失败。
 
-手动触发只填写 `sync.yml` 中的 alias `name`，例如 `dockerhub`。手动运行不读取 Git diff，强制执行该 alias；如果对应 manifest 为空则失败。
+手动触发只填写 `sync.yml` 中的 alias `name`，例如 `public`。手动运行不读取 Git diff，强制执行该 alias；如果对应 manifest 为空则失败。
 
 每个 alias 的 `archs` 会展开成 Actions matrix。当前代码只允许每个 alias 配置一个架构，因为多个单架构 job 写相同目标 tags 时只会互相覆盖，不会自动合并为多架构 index。
 

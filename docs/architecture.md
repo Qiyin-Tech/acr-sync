@@ -2,7 +2,7 @@
 
 ## Goal and constraints
 
-The repository supports two related tasks: copying one tagged image through a reusable GitHub composite action, and synchronizing a repository-owned list of public Docker Hub images.
+The repository supports three related tasks: copying one tagged image through a reusable GitHub composite action, copying one tagged OCI artifact through the same action, and synchronizing a repository-owned list of public Docker Hub images.
 
 The design keeps these constraints explicit:
 
@@ -13,6 +13,7 @@ The design keeps these constraints explicit:
 - The target contains the selected single-platform manifest, not the source image index.
 - ACR username comes from an organization variable and its password from an organization secret.
 - Layer reuse is delegated to Skopeo and the Registry protocol.
+- OCI artifact manifests and blobs are copied by ORAS; registry-side blob deduplication still applies, but Docker/BuildKit layer-cache semantics do not.
 
 ## Chosen boundaries
 

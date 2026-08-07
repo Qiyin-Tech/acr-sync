@@ -1,8 +1,8 @@
-dockerhub:
+public:
   archs:
     - amd64
   target_namespace: public
-  manifest_path: manifest/dockerhub.yml
+  manifest_path: manifest/public.yml
 
 ghcr:
   archs:

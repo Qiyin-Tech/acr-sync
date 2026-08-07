@@ -1,9 +1,13 @@
 name: Sync image to ACR
-description: Copy one tagged container image to the organization ACR with Skopeo
+description: Copy one tagged container image or OCI artifact to the organization ACR
 
 inputs:
+  kind:
+    description: Content kind to copy, either image or artifact
+    required: false
+    default: image
   source:
-    description: Source image without a tag, e.g. ghcr.io/qiyin-tech/orchestra-backend or docker.io/library/nginx
+    description: Source repository without a tag, e.g. ghcr.io/qiyin-tech/orchestra-backend or ghcr.io/qiyin-tech/1.0-renderer
     required: true
   tag:
     description: Source tag to copy, e.g. v1.2.3; the same tag is used in ACR
@@ -39,10 +43,16 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Set up ORAS
+      if: inputs.kind == 'artifact'
+      uses: oras-project/setup-oras@v2.0.1
+      with:
+        version: 1.3.3
     - name: Sync image
       id: sync
       shell: bash
       env:
+        KIND: ${{ inputs.kind }}
         SOURCE: ${{ inputs.source }}
         TAG: ${{ inputs.tag }}
         ARCH: ${{ inputs.arch }}
@@ -54,4 +64,5 @@ runs:
         ACR_PASSWORD: ${{ inputs.acr_password }}
         GHCR_USERNAME: ${{ github.actor }}
         GHCR_TOKEN: ${{ github.token }}
-      run: ${{ github.action_path }}/scripts/sync-image
+        ACTION_PATH: ${{ github.action_path }}
+      run: ${{ github.action_path }}/scripts/sync
