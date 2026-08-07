@@ -11,9 +11,9 @@ on:
   workflow_dispatch:
     inputs:
       name:
-        description: Alias from sync.yml, e.g. dockerhub or ghcr
+        description: Alias from sync.yml, e.g. public or ghcr
         required: true
-        default: dockerhub
+        default: public
         type: string
 
 permissions:

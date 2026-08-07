@@ -3,23 +3,45 @@ docker.io:
   images:
     cars10/elasticvue:
       - "1.14.0"
+    casbin/casdoor:
+      - "3.142.0"
     grafana/grafana:
       - "13.0.1"
+    library/mysql:
+      - "5.7.44"
+      - "8.0.46"
     library/nginx:
       - "stable-alpine3.24-perl"
     library/postgres:
+      - "14.23"
       - "18.4-alpine"
     library/redis:
       - "7.4.9-alpine"
     library/traefik:
       - "v3.7.5"
+    metacubex/mihomo:
+      - "v1.19.29"
+    minio/minio:
+      - "RELEASE.2025-09-07T16-13-09Z"
+    mrxianyu/metacubexd-ui:
+      - "v1.176.1"
+    n8nio/n8n:
+      - "2.33.5"
+    otel/opentelemetry-collector-contrib:
+      - "0.158.0"
     prometheuscommunity/elasticsearch-exporter:
       - "v1.10.0"
     timberio/vector:
       - "0.55.0-debian"
     treeverse/lakefs:
       - "1.81.0"
+    utkuozdemir/nvidia_gpu_exporter:
+      - "1.2.0"
     victoriametrics/victoria-logs:
       - "v1.50.0"
     victoriametrics/victoria-metrics:
       - "v1.142.0"
+ghcr.io:
+  images:
+    open-webui/open-webui:
+      - "v0.8.12"

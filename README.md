@@ -131,7 +131,7 @@ ghcr.io/qiyin-tech/orchestra-backend:v1.2.3
 
 ```text
 sync.yml                  alias、架构、目标 namespace、manifest 路径
-manifest/dockerhub.yml    Skopeo 原生 Docker Hub source manifest
+manifest/public.yml       Skopeo 原生公开 Docker Hub / GHCR source manifest
 manifest/ghcr.yml         Skopeo 原生 GHCR source manifest
 ```
 
@@ -155,11 +155,11 @@ docker.io:
 `sync.yml` 当前配置为：
 
 ```yaml
-dockerhub:
+public:
   archs:
     - amd64
   target_namespace: public
-  manifest_path: manifest/dockerhub.yml
+  manifest_path: manifest/public.yml
 
 ghcr:
   archs:
@@ -187,7 +187,7 @@ push 触发时，`scripts/prepare-sync-matrix` 根据本次 push 的 Git diff �
 - 被选中的空 manifest：打印 warning 并跳过。
 - 配置引用不存在的 manifest：失败。
 
-手动触发只填写 `sync.yml` 中的 alias `name`，例如 `dockerhub`。手动运行不读取 Git diff，强制执行该 alias；如果对应 manifest 为空则失败。
+手动触发只填写 `sync.yml` 中的 alias `name`，例如 `public`。手动运行不读取 Git diff，强制执行该 alias；如果对应 manifest 为空则失败。
 
 每个 alias 的 `archs` 会展开成 Actions matrix。当前代码只允许每个 alias 配置一个架构，因为多个单架构 job 写相同目标 tags 时只会互相覆盖，不会自动合并为多架构 index。
 
