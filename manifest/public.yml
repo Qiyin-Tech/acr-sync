@@ -43,5 +43,7 @@ docker.io:
       - "v1.142.0"
 ghcr.io:
   images:
+    metowolf/meting-api:
+      - "1.10.1"
     open-webui/open-webui:
       - "v0.8.12"
