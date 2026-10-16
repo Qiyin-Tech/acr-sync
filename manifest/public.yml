@@ -5,8 +5,6 @@ docker.io:
       - "1.14.0"
     casbin/casdoor:
       - "3.142.0"
-    conductoross/conductor:
-      - "3.32.5"
     grafana/grafana:
       - "13.0.1"
     library/mysql:
