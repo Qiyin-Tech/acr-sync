@@ -31,6 +31,8 @@ docker.io:
       - "0.158.0"
     prometheuscommunity/elasticsearch-exporter:
       - "v1.10.0"
+    ranjie/temporaless:
+      - "latest"
     timberio/vector:
       - "0.55.0-debian"
     treeverse/lakefs:
