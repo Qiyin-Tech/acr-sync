@@ -21,8 +21,6 @@ docker.io:
       - "v3.7.5"
     metacubex/mihomo:
       - "v1.19.29"
-    minio/minio:
-      - "RELEASE.2025-09-07T16-13-09Z"
     mrxianyu/metacubexd-ui:
       - "v1.176.1"
     n8nio/n8n:
